@@ -159,5 +159,5 @@ integrations, browser providers, scheduling, collaboration, and hardening.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance gates and
 [docs/development.md](docs/development.md) for the implementation order.
-The planned pre-push privacy gate is npm run privacy-check; it is not
+The planned pre-push privacy gate is scripts/privacy-check.sh; it is not
 implemented until the first implementation slice.

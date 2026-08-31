@@ -66,7 +66,7 @@ and the privacy check must still inspect the staged file set.
 
 ## Planned privacy check
 
-Before a commit or public push, add a deterministic npm run privacy-check
+Before a commit or public push, add a deterministic scripts/privacy-check.sh
 command. It should run without network access and fail closed when:
 
 - tracked or staged paths match runtime, cache, transcript, browser-profile,

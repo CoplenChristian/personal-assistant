@@ -15,7 +15,7 @@ model APIs.
 React dashboard
       | localhost HTTP / WebSocket
       v
-Local Node server ---------------- SQLite + FTS5
+Local ASP.NET Core server -------- SQLite + FTS5
       |                                      |
       |- Agent registry                      |- agents, sessions, jobs
       |- Session manager                     |- activity/audit events
@@ -85,7 +85,7 @@ and a restart are required.
 
 ### 2.1 Typed registry
 
-The settings service has one canonical TypeScript registry. Each definition
+The settings service has one canonical C# registry. Each definition
 contains at least:
 
 ~~~text
@@ -537,8 +537,8 @@ See docs/threat-model.md for the local-trust model and its non-guarantees.
 | Area | Choice |
 | --- | --- |
 | Host | macOS |
-| Language | TypeScript / Node.js |
-| UI | React + Vite |
+| Backend | C# / .NET ASP.NET Core |
+| UI | React + Vite + TypeScript |
 | Terminal | xterm.js |
 | Transport | localhost HTTP + WebSocket; Unix socket for broker |
 | Persistence | SQLite + FTS5 |

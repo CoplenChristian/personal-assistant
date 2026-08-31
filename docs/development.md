@@ -8,7 +8,8 @@ integrations remain deferred.
 
 The eventual Phase 0 implementation is macOS-first and will require:
 
-- Node.js and npm
+- .NET SDK 10 or the repository-selected compatible SDK
+- Node.js and npm for the React/Vite dashboard only
 - tmux
 - an authenticated claude CLI
 - an authenticated codex CLI
@@ -46,8 +47,8 @@ overrides, transcripts, browser profiles, mail caches, screenshots, and
 downloads belong under ignored runtime/ paths. shared/USER.template.md is the
 tracked template for private runtime user context.
 
-See [privacy.md](privacy.md) for the layout and planned npm run
-privacy-check gate. The check must be deterministic, local, and able to name
+See [privacy.md](privacy.md) for the layout and planned
+scripts/privacy-check.sh gate. The check must be deterministic, local, and able to name
 the exact staged path or credential-shaped content it rejects. .gitignore is a
 guardrail, not a substitute for review.
 
@@ -185,11 +186,13 @@ implementation scripts are added. Once the settings slice exists, the
 applicable checks should include:
 
 ~~~sh
-npm run build
-npm run typecheck
-npm test
-npm run lint
-npm run privacy-check
+dotnet build PersonalAssistant.sln
+dotnet test PersonalAssistant.sln
+npm --prefix apps/dashboard run build
+npm --prefix apps/dashboard run typecheck
+npm --prefix apps/dashboard test
+npm --prefix apps/dashboard run lint
+./scripts/privacy-check.sh
 ~~~
 
 All settings tests must use local/in-memory fixtures. No provider token should be

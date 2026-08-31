@@ -44,7 +44,7 @@ Acceptance gate:
 - [ ] Settings route has loading, error, dirty, save, reset, and restart-required states.
 - [ ] Frontend controls are accessible and keyboard usable.
 - [ ] Tracked files use safe templates; generated personal state is ignored.
-- [ ] npm run privacy-check passes before public pushes.
+- [ ] scripts/privacy-check.sh passes before public pushes.
 - [ ] Tests run without Anthropic/OpenAI credentials.
 
 ## Phase 0B — One Claude agent persisted in tmux

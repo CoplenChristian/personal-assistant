@@ -1,5 +1,7 @@
 # Harness core
 
+The future C#/.NET class library for the reusable local control plane.
+
 Planned domains:
 
 - agent definitions and registry reconciliation

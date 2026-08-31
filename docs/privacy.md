@@ -56,6 +56,8 @@ The following belongs outside tracked source:
 - browser profiles and browser credentials/state;
 - mail caches and downloaded message content;
 - screenshots, browser downloads, and exported artifacts;
+- credential/state artifacts such as p12/pfx/token files, storage state,
+  cookies, credentials, secrets, OAuth, token, and JSONL directories/files;
 - SQLite databases, roster snapshots, logs, and session state; and
 - personal documents in PersonalAssistantVault or another external vault.
 
@@ -70,6 +72,8 @@ command. It should run without network access and fail closed when:
 - tracked or staged paths match runtime, cache, transcript, browser-profile,
   screenshot, download, vault, or generated-memory patterns;
 - tracked files contain credential-shaped material or private key markers;
+- tracked paths contain credential/state artifacts such as p12, pfx, token,
+  storage-state, cookies, credentials, secrets, OAuth, tokens, or JSONL files;
 - instantiated MEMORY.md, HANDOFF.md, or USER.md files appear outside ignored
   runtime paths; or
 - a generated runtime artifact is being force-added despite ignore rules.

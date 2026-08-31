@@ -11,6 +11,16 @@ coverage/
 !.env.example
 *.pem
 *.key
+*.p12
+*.pfx
+*.token
+*.jsonl
+storage-state*.json
+cookies*
+credentials/
+secrets/
+oauth/
+tokens/
 
 # Harness runtime state: SQLite, logs, roster, and session artifacts
 runtime/*

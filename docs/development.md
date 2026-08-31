@@ -67,6 +67,10 @@ Each slice must end with a usable outcome and a focused acceptance gate. Do
 not implement the later integrations merely because their settings cards or
 skill placeholders exist.
 
+The authorization-context contract is part of the Phase 0A design even though
+external integrations are deferred. Later providers must not retrofit
+provenance after capability calls already exist.
+
 ## Phase 0A typed settings implementation order
 
 Implement the narrow settings vertical slice in this order:
@@ -106,7 +110,10 @@ Tests must run without Anthropic/OpenAI credentials and should cover:
 - realm/account metadata is not authorized by naming prefix alone.
 - populated runtime memory/handoff files are never staged;
 - settings/default changes do not rewrite existing agent definitions; and
-- unconfigured tmux sessions receive no capabilities.
+- unconfigured tmux sessions receive no capabilities;
+- model-supplied source/initiator/allowed-capability fields are not trusted;
+- expired or session-mismatched authorization contexts are rejected; and
+- a scheduled job cannot use a capability outside its explicit subset.
 
 ## Required frontend behavior
 
@@ -149,6 +156,25 @@ The eventual skill tests should cover every ingress path—dashboard, iMessage,
 scheduler, and agent message—through normalization, deterministic trigger
 matching, agent-eligible skill filtering, context injection, and native skill
 discovery. No routing LLM is permitted.
+
+## Authorization and bypass tests before integrations
+
+Before Phase 3, 4, or 5 is enabled, add local tests and an implementation
+review for the threat-model gate in [threat-model.md](threat-model.md). At a
+minimum, test that:
+
+- email or browser content cannot grant a messaging/calendar/mail-write
+  capability;
+- a model cannot widen an authorization context by changing request fields;
+- an authorization context is bound to the correct agent/session and expires;
+- message.reply requires the verified inbound message reference in context;
+- a scheduled request is the intersection of global policy, agent upper bound,
+  and job subset; and
+- broker/helper credentials and sensitive runtime state are not available via
+  the native agent's environment or an equivalent alternate provider path.
+
+If the last condition cannot be demonstrated, keep the integration disabled or
+manual-only rather than treating the broker as a complete security boundary.
 
 ## Workspace checks
 

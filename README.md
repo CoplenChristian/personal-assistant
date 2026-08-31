@@ -84,9 +84,12 @@ Existing agents are not rewritten when a default changes.
 - Consequential actions produce immutable audit events.
 - Session clear/rotation checkpoints durable memory first.
 - Unknown, invalid, immutable, bootstrap, and sensitive setting writes fail closed.
+- Capability requests carry trusted, expiring turn provenance; external content cannot grant authority.
+- Native agents do not receive integration credentials or alternate provider paths.
 
 See [docs/security-invariants.md](docs/security-invariants.md) and
-[docs/architecture.md](docs/architecture.md).
+[docs/architecture.md](docs/architecture.md). The required threat model is in
+[docs/threat-model.md](docs/threat-model.md).
 
 ## State boundaries
 

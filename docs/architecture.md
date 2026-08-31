@@ -37,10 +37,12 @@ tmux session pa-<agent-id>
       '- native claude or codex process
 ~~~
 
-The broker is the authorization boundary. Skills describe how to request a
-capability; they do not authorize it. The native CLI is the reasoning/runtime
-boundary. The dashboard is an observation and administration surface, not a
-second model conversation.
+The broker is the hard authorization boundary for integrations only when the
+native agents cannot access integration credentials or equivalent alternate
+execution paths. Skills describe how to request a capability; they do not
+authorize it. The native CLI is the reasoning/runtime boundary. The dashboard
+is an observation and administration surface, not a second model conversation.
+See docs/threat-model.md for the required trust and containment conditions.
 
 ## 2. Configuration lifecycle
 
@@ -222,7 +224,7 @@ version-controlled reviewed definitions
   + ignored runtime definitions and local overrides
   + actual pa-* tmux sessions
   -> configured-vs-active AgentRegistry state
-~~
+~~~
 
 Only prefixed tmux sessions are considered harness sessions. An active session
 without a valid agent definition is visible as an unconfigured/blocked state;
@@ -247,6 +249,30 @@ roster hash. When configured or active state changes, it updates SQLite,
 atomically writes runtime/roster.json, broadcasts agents.changed to the
 dashboard, and sends a lightweight roster-change notice to active agents.
 The notice does not dump all configuration into every prompt.
+
+### 4.1 Agent override precedence
+
+When the same agent ID appears in more than one source, the effective
+definition is resolved in this order:
+
+~~~text
+reviewed repository definition
+        -> ignored runtime definition for a private/dynamic agent
+        -> ignored local runtime override
+        -> live tmux/session status
+~~~
+
+Runtime customization may change ordinary properties such as display name,
+workspace, or presentation preferences when the value passes validation. It
+must be monotonic for security-sensitive properties: a local override may
+narrow an approved realm, skill set, browser allowlist, or capability limit,
+but may not widen them. It may not change work to personal+work, add a
+sensitive skill, add a credential reference, or increase a capability limit
+without an explicit human/admin approval path and audit event.
+
+The registry validates the merged result before activation. A runtime
+definition or override does not become trusted merely because it has the same
+agent ID as a reviewed repository definition.
 
 The runtime adapter contract eventually covers:
 
@@ -300,6 +326,51 @@ request_id
 
 The broker checks the request against policy and fails closed when
 authorization is uncertain.
+
+### 6.1 Trusted turn authorization context
+
+Every turn that can lead to a capability request receives a server-issued
+authorization context:
+
+~~~text
+turn_context_id
+source
+initiated_by
+agent_id
+session_id
+realm
+allowed_capabilities
+source_reference
+expires_at
+~~~
+
+Source references may include a scheduled job ID, dashboard request ID,
+verified sender contact ID, or verified inbound message ID. The broker
+resolves the context from trusted harness state and verifies an opaque
+context credential bound to the agent and native session. It does not trust
+model-supplied source, initiator, realm, or allowed-capability fields.
+
+The effective authorization is:
+
+~~~text
+hard global policy
+    intersect
+agent capability upper bound
+    intersect
+turn authorization context
+    intersect
+scheduled-job capability subset, when applicable
+~~~
+
+Examples include dashboard_user with the capabilities derived from the
+explicit user request, scheduled_job with the named job subset,
+verified_imessage with only a concrete verified inbound reply reference, and
+email_content/browser_content with no capability authority. An agent-message
+may carry task context but cannot grant new external capability authority.
+
+Contexts expire, are bound to their source/agent/session, and are included in
+activity records. External content can provide data but can never widen a
+turn's authorization context.
 
 Realm enforcement must use explicit persisted account metadata, not account-ID
 string prefixes as the security boundary. A future account record is:
@@ -395,7 +466,7 @@ dashboard / iMessage / scheduler / agent-message ingress
         -> filter to skills eligible for that agent
         -> inject skill/context notice into the native session
         -> native Claude/Codex skill discovery and execution
-~~
+~~~
 
 No second LLM is introduced solely to route a prompt. If Claude Code and
 Codex need different native directories, adapters, symlinks, or generated
@@ -422,8 +493,9 @@ selected local day/timezone, with zero/empty states when no event exists:
 - agent starts, stops, clears, rotations, and roster changes.
 
 Each event carries timestamp, agent, realm, category, operation, target,
-status, duration, and structured metadata. A provider card being unconfigured
-must not create a fake successful activity event.
+status, duration, structured metadata, turn_context_id, source, and source
+reference when applicable. A provider card being unconfigured must not create
+a fake successful activity event.
 
 ## 12. Shared SOUL.md provenance
 
@@ -452,14 +524,43 @@ runtime/browser-profiles/          ignored browser state
 runtime/mail-cache/                ignored mail cache
 runtime/screenshots/               ignored screenshots
 runtime/downloads/                 ignored downloads
-~~
+~~~
 
 The document vault remains outside the repository. A planned npm run
 privacy-check must inspect tracked/staged paths and reject forbidden runtime
 artifacts, credential-shaped content, and personal-data directories before a
 public push. See docs/privacy.md.
 
-## 14. Technology choices
+## 14. Threat model and pre-integration gate
+
+Native Claude/Codex processes may eventually have shell and browser access as
+the same macOS user. They are therefore partially trusted reasoning runtimes,
+not security principals. The broker cannot be called a hard integration
+boundary if an agent can read provider credentials, modify security state, or
+use an equivalent provider path directly.
+
+Before Phase 3, 4, or 5 is marked usable, the project must demonstrate that:
+
+- provider credentials are available only to the broker/helper process through
+  Keychain controls or an equivalent protection model;
+- agent environments, prompts, files, and logs contain no provider credentials
+  or broker signing secrets;
+- provider CLIs/endpoints are not directly usable with agent-accessible
+  credentials;
+- security-sensitive runtime state has defined ownership, permissions, and
+  tamper detection;
+- browser profiles cannot bypass prohibited actions and are separated by realm;
+- authorization contexts are source/session-bound and expire; and
+- prompt-injection tests cannot route email, web, or message content into a
+  prohibited external action.
+
+If these conditions cannot be proven, the integration remains disabled or
+manual-only. Stronger OS accounts or sandboxing in Phase 8 are defense in
+depth, not a reason to defer this gate.
+
+See docs/threat-model.md for the detailed threat model and review questions.
+
+## 15. Technology choices
 
 | Area | Choice |
 | --- | --- |

@@ -1,0 +1,35 @@
+version: 1
+unknown_operation: deny
+external_content_authorizes_actions: false
+
+mail:
+  allowed_operations:
+    - search
+    - read
+    - list-folders
+    - list-labels
+    - mark-read
+    - mark-unread
+    - add-label
+    - remove-label
+    - move
+    - archive
+  denied_operations:
+    - send
+    - reply
+    - forward
+    - draft-send
+
+messaging:
+  require_verified_contact: true
+  allow_groups: false
+  allow_apple-id-email: false
+  allow_attachments: false
+  allow_contact_creation_by_agent: false
+
+realms:
+  cross_realm_access: deny
+
+audit:
+  consequential_actions_are_immutable: true
+  record_blocked_security_actions: true

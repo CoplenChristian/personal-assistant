@@ -1,0 +1,11 @@
+name: browser
+description: Use a realm-specific controlled browser provider.
+triggers:
+  - browser
+  - website
+  - web page
+  - navigate
+capabilities:
+  - browser.open
+  - browser.inspect
+  - browser.interact

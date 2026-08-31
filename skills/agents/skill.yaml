@@ -1,0 +1,10 @@
+name: agents
+description: Discover and message configured agents through the harness.
+triggers:
+  - agent
+  - delegate
+  - ask research
+  - hand off
+capabilities:
+  - agents.list
+  - agents.message

@@ -1,0 +1,13 @@
+name: email
+description: Search, read, and organize mail without outbound mail capability.
+triggers:
+  - email
+  - inbox
+  - unread
+  - archive
+  - label
+  - mailbox
+capabilities:
+  - mail.search
+  - mail.read
+  - mail.modify

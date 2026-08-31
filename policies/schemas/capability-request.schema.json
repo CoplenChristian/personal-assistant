@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-assistant.local/schemas/capability-request.schema.json",
+  "title": "Capability request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "realm",
+    "capability",
+    "operation",
+    "parameters",
+    "request_id"
+  ],
+  "properties": {
+    "agent_id": { "type": "string", "minLength": 1 },
+    "realm": { "enum": ["personal", "work", "shared"] },
+    "capability": { "type": "string", "minLength": 1 },
+    "operation": { "type": "string", "minLength": 1 },
+    "parameters": { "type": "object" },
+    "request_id": { "type": "string", "minLength": 1 }
+  }
+}

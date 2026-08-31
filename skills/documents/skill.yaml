@@ -1,0 +1,13 @@
+name: documents
+description: Search the local document vault with source and page provenance.
+triggers:
+  - document
+  - policy
+  - insurance
+  - tax
+  - hoa
+  - bill
+  - house
+capabilities:
+  - documents.search
+  - documents.read

@@ -1,0 +1,27 @@
+# Dependencies and generated JavaScript
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Harness runtime state: SQLite, logs, roster, and session artifacts
+runtime/*
+!runtime/README.md
+
+# Local personal document vaults should never be committed
+PersonalAssistantVault/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+
+# macOS
+.DS_Store

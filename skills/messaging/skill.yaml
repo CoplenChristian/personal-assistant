@@ -1,0 +1,10 @@
+name: messaging
+description: Reply to and send messages only through verified contacts.
+triggers:
+  - text
+  - message
+  - imessage
+  - reply
+capabilities:
+  - message.reply
+  - message.send

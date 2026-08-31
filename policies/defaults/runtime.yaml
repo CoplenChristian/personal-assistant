@@ -1,0 +1,14 @@
+version: 1
+tmux:
+  session_prefix: pa-
+  history_lines: 15000
+terminal_logs:
+  active_warning_bytes: 26214400
+  rotated_files: 5
+native_sessions:
+  warning_bytes: 26214400
+  rotate_bytes: 52428800
+  archive_ttl_days: 30
+scheduler:
+  one_injected_prompt_per_agent: true
+  scheduled_jobs_target_logical_agent: true

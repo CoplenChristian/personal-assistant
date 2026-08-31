@@ -1,0 +1,11 @@
+name: memory
+description: Query and checkpoint durable SQLite FTS5 memory.
+triggers:
+  - remember
+  - memory
+  - recall
+  - checkpoint
+capabilities:
+  - memory.search
+  - memory.write
+  - memory.checkpoint

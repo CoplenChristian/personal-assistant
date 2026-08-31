@@ -1,0 +1,18 @@
+id: work
+name: Work
+runtime: codex
+working_directory: null
+realms:
+  - work
+skills:
+  - email
+  - documents
+  - memory
+  - agents
+  - browser
+auto_start: false
+browser_profile: work
+memory_scope: work
+scheduled_task_permissions:
+  - mail.read
+  - mail.modify

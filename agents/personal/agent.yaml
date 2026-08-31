@@ -1,0 +1,23 @@
+id: personal
+name: Personal
+runtime: claude
+working_directory: null
+realms:
+  - personal
+skills:
+  - email
+  - messaging
+  - reminders
+  - documents
+  - memory
+  - agents
+  - browser
+auto_start: false
+browser_profile: personal
+memory_scope: personal
+scheduled_task_permissions:
+  - reminder.create
+  - calendar.create
+  - mail.read
+  - mail.modify
+  - message.reply

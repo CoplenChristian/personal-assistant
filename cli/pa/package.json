@@ -1,0 +1,9 @@
+{
+  "name": "@personal-assistant/pa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "pa": "dist/index.js"
+  }
+}

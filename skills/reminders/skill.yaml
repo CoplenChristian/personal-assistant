@@ -1,0 +1,12 @@
+name: reminders
+description: Create reminders and calendar events in approved iCloud targets.
+triggers:
+  - remind
+  - reminder
+  - calendar
+  - appointment
+capabilities:
+  - reminder.create
+  - calendar.create
+  - reminder.list-approved-lists
+  - calendar.list-approved-calendars

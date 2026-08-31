@@ -1,0 +1,11 @@
+version: 1
+realms:
+  personal:
+    allowed_account_prefixes:
+      - personal-
+  work:
+    allowed_account_prefixes:
+      - work-
+  shared:
+    allowed_account_prefixes: []
+default: deny

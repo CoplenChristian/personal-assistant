@@ -92,7 +92,7 @@ See [docs/security-invariants.md](docs/security-invariants.md) and
 
 | Data | Source of truth |
 | --- | --- |
-| Code, instructions, skill definitions, schemas, policy defaults | Git |
+| Code, instructions, skill definitions, schemas, policy defaults, safe templates | Git |
 | Bootstrap startup configuration | Environment or launchd |
 | User preferences and runtime overrides | SQLite in the ignored runtime directory |
 | Provider credentials and tokens | macOS Keychain |
@@ -101,13 +101,17 @@ See [docs/security-invariants.md](docs/security-invariants.md) and
 | Searchable memory and document index | SQLite/FTS5 runtime state |
 | Terminal/session logs | Rotated runtime artifacts, never durable memory |
 
+See [docs/privacy.md](docs/privacy.md) for the tracked-template and ignored
+runtime layout. This repository is public, so privacy review is required even
+when the source repository itself has no credentials.
+
 ## Repository map
 
 ~~~text
 apps/                 Server and React dashboard entry points
 packages/             Harness, capability broker, and runtime adapter domains
 cli/                  The local pa capability/request CLI
-agents/               Durable agent manifests and instruction/memory files
+agents/               Safe agent manifests, instructions, and templates
 shared/               Shared persona and operating guidance
 skills/               Canonical procedural skill catalog
 hooks/                Deterministic routing, checkpoint, and activity hooks
@@ -126,3 +130,5 @@ integrations, browser providers, scheduling, collaboration, and hardening.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance gates and
 [docs/development.md](docs/development.md) for the implementation order.
+The planned pre-push privacy gate is npm run privacy-check; it is not
+implemented until the first implementation slice.

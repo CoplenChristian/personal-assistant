@@ -16,6 +16,25 @@ coverage/
 runtime/*
 !runtime/README.md
 
+# Generated agent state must not become tracked source content
+agents/*/MEMORY.md
+agents/*/HANDOFF.md
+agents/*/local/
+agents/*/transcripts/
+agents/*/browser-profiles/
+agents/*/mail-cache/
+agents/*/screenshots/
+agents/*/downloads/
+
+# Other local/private runtime material
+shared/USER.md
+shared/local/
+browser-profiles/
+mail-cache/
+screenshots/
+downloads/
+*.har
+
 # Local personal document vaults should never be committed
 PersonalAssistantVault/
 *.sqlite

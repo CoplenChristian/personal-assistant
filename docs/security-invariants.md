@@ -26,6 +26,9 @@ request is malformed.
 20. A scheduled job receives only an explicit capability subset within its agent's upper bound.
 21. message.reply requires a concrete verified inbound message reference.
 22. Proactive notifications use a separate capability targeting an already verified configured contact.
+23. Tracked memory, handoff, user-context, transcript, cache, profile, screenshot, and download files are never populated private state.
+24. An unconfigured or policy-invalid tmux session receives no capabilities.
+25. Roster changes do not grant capabilities; they only update explicitly validated agent state.
 
 ## Realm and account boundary
 
@@ -46,6 +49,10 @@ defaults or migration hints. They are not the security boundary. A capability
 request must resolve the account record and compare its stored realm with the
 agent's approved realm before access is allowed.
 
+Dynamic agent definitions and local overrides follow the same rule: a runtime
+definition must be validated before it can become active, and the presence of
+a pa-* tmux session alone never grants access.
+
 ## Settings boundary
 
 The Settings API may expose effective locked safety values for visibility, but
@@ -64,6 +71,27 @@ inherit every agent write permission automatically.
 A reply to an inbound message is bound to a concrete verified inbound message
 reference. A future proactive notification is a separate, verified-contact
 operation.
+
+## Privacy boundary
+
+The public repository contains portable instructions and templates only. The
+instantiated files runtime/agents/<id>/MEMORY.md,
+runtime/agents/<id>/HANDOFF.md, and runtime/shared/USER.md are ignored runtime
+state; their tracked counterparts are templates. Runtime databases, transcripts,
+caches, browser profiles, screenshots, downloads, and personal documents
+remain outside Git.
+
+The planned privacy check is deterministic and local. It must inspect the
+staged file set and fail closed on forbidden paths or credential-shaped
+content; it must not use an LLM to decide whether a file is private.
+
+## Skill and persona boundary
+
+The canonical skills catalog is procedural guidance, not authorization. All
+ingress paths use deterministic trigger matching and eligible-skill filtering
+before native skill discovery. The shared SOUL.md is persona only; its
+OpenClaw source/version/commit and local review must be recorded before Phase 1
+and it must not contain operational permissions.
 
 ## Required blocked-action visibility
 

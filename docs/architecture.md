@@ -1,8 +1,8 @@
 # Architecture brief
 
 This document is the current planning baseline for the Personal Assistant
-Harness. It incorporates the configuration/settings review feedback without
-implementing the runtime or external integrations.
+Harness. It incorporates the configuration, privacy, lifecycle, and review
+feedback without implementing the runtime or external integrations.
 
 ## 1. Core principle
 
@@ -201,6 +201,12 @@ hard safety invariant.
   context; terminal logs are not durable assistant memory.
 - Mutable allowlists and verified-contact records are protected runtime state,
   not skill text or Git-tracked defaults.
+- Tracked agent memory and handoff files are templates only. Instantiated
+  memory, handoffs, local agent overrides, transcripts, browser profiles, mail
+  caches, screenshots, and downloads live under ignored runtime paths.
+- The privacy layout and planned repository check are defined in
+  docs/privacy.md. A public source repository is never treated as a safe place
+  for personal state merely because its visibility is convenient.
 
 ## 4. Agent and session model
 
@@ -208,6 +214,39 @@ An agent is a durable logical object defined by agents/*/agent.yaml. Each
 active agent owns one pa-<id> tmux session. A native conversation may rotate
 without deleting the logical agent, its realm, skills, schedule references,
 settings scope, or durable memory.
+
+The AgentRegistry is the single roster authority. It reconciles:
+
+~~~text
+version-controlled reviewed definitions
+  + ignored runtime definitions and local overrides
+  + actual pa-* tmux sessions
+  -> configured-vs-active AgentRegistry state
+~~
+
+Only prefixed tmux sessions are considered harness sessions. An active session
+without a valid agent definition is visible as an unconfigured/blocked state;
+it does not receive capabilities. A configured agent can be stopped without
+deleting its definition or runtime memory.
+
+Agent lifecycle rules:
+
+- Create is an explicit dashboard action that validates an ID, runtime, realm,
+  and workspace before writing a local definition and optional runtime state.
+- Start creates or resumes the prefixed tmux session only after configuration
+  exists and policy validation succeeds.
+- Stop ends the session but retains the logical agent, audit history, and
+  durable state.
+- Delete is an explicit human action. It stops the session first and archives
+  or removes local runtime state without deleting immutable audit records.
+- Promoting a private runtime definition into Git requires an explicit human
+  review; dynamic creation must not silently publish local paths or context.
+
+On startup and on a short reconciliation interval, the registry computes a
+roster hash. When configured or active state changes, it updates SQLite,
+atomically writes runtime/roster.json, broadcasts agents.changed to the
+dashboard, and sends a lightweight roster-change notice to active agents.
+The notice does not dump all configuration into every prompt.
 
 The runtime adapter contract eventually covers:
 
@@ -341,7 +380,86 @@ connected accounts or credentials:
 External integrations remain deferred. This settings work does not implement
 Gmail, BlueBubbles, EventKit, browser automation, messaging, or scheduling.
 
-## 10. Technology choices
+## 10. Canonical skill activation
+
+The repository has one canonical skill catalog under skills/. Its metadata and
+procedures are portable source material; skills never contain credentials or
+authorization decisions.
+
+Every ingress path follows the same planned pipeline:
+
+~~~text
+dashboard / iMessage / scheduler / agent-message ingress
+        -> normalize source, agent, and realm
+        -> deterministic keyword/rule trigger matcher
+        -> filter to skills eligible for that agent
+        -> inject skill/context notice into the native session
+        -> native Claude/Codex skill discovery and execution
+~~
+
+No second LLM is introduced solely to route a prompt. If Claude Code and
+Codex need different native directories, adapters, symlinks, or generated
+views may project the canonical catalog into those layouts. The repository
+catalog remains the source of truth. External content can trigger a skill
+match but can never grant a capability.
+
+## 11. Dashboard activity model
+
+The immutable activity_events model is also the dashboard's initial activity
+source. The dashboard should expose both a recent feed and counters for the
+selected local day/timezone, with zero/empty states when no event exists:
+
+- prompts delivered to agents;
+- scheduled runs and queued/dropped scheduled prompts;
+- email reads and modifications;
+- messages sent, replied, and blocked;
+- calendar and reminder writes;
+- memory writes/checkpoints;
+- document indexing events;
+- browser actions;
+- blocked security actions;
+- failures; and
+- agent starts, stops, clears, rotations, and roster changes.
+
+Each event carries timestamp, agent, realm, category, operation, target,
+status, duration, and structured metadata. A provider card being unconfigured
+must not create a fake successful activity event.
+
+## 12. Shared SOUL.md provenance
+
+shared/SOUL.md is a reviewed persona boundary, not an authorization document.
+Before Phase 1, the project must vendor the intended OpenClaw starter version
+and record its upstream repository/source URL, tag or commit, vendoring date,
+local edits, and acceptance decision. The vendored text must be reviewed for
+this assistant. Operational rules remain in AGENTS.md and policy code, and
+agents must not silently rewrite SOUL.md.
+
+## 13. Privacy-safe file layout
+
+The public repository contains portable instructions and templates only. The
+planned private runtime layout is:
+
+~~~text
+agents/<id>/MEMORY.template.md     tracked template
+agents/<id>/HANDOFF.template.md    tracked template
+shared/USER.template.md            tracked template
+
+runtime/agents/<id>/MEMORY.md      ignored generated memory
+runtime/agents/<id>/HANDOFF.md     ignored handoff
+runtime/agents/<id>/local/         ignored local overrides
+runtime/agents/<id>/transcripts/   ignored raw session artifacts
+runtime/browser-profiles/          ignored browser state
+runtime/mail-cache/                ignored mail cache
+runtime/screenshots/               ignored screenshots
+runtime/downloads/                 ignored downloads
+~~
+
+The document vault remains outside the repository. A planned npm run
+privacy-check must inspect tracked/staged paths and reject forbidden runtime
+artifacts, credential-shaped content, and personal-data directories before a
+public push. See docs/privacy.md.
+
+## 14. Technology choices
 
 | Area | Choice |
 | --- | --- |

@@ -37,7 +37,37 @@ The effective configuration resolver must apply hard invariants to every layer.
 It must not open a database to discover the path of that same database, and it
 must never silently fall back across realms.
 
-## Typed settings implementation order
+## Privacy boundary before implementation
+
+Because the source repository is public, populate only portable tracked files.
+The agents directory contains safe definitions and MEMORY.template.md/
+HANDOFF.template.md files; instantiated MEMORY.md, HANDOFF.md, local agent
+overrides, transcripts, browser profiles, mail caches, screenshots, and
+downloads belong under ignored runtime/ paths. shared/USER.template.md is the
+tracked template for private runtime user context.
+
+See [privacy.md](privacy.md) for the layout and planned npm run
+privacy-check gate. The check must be deterministic, local, and able to name
+the exact staged path or credential-shaped content it rejects. .gitignore is a
+guardrail, not a substitute for review.
+
+## Phase 0 vertical slices
+
+Phase 0 is intentionally split into independently reviewable slices:
+
+- 0A — settings/configuration: typed registry, defaults, SQLite overrides,
+  API, Settings route, and tests;
+- 0B — one Claude agent persisted in tmux;
+- 0C — terminal dashboard, input serialization, clear, compact, and rotation;
+- 0D — Codex runtime adapter;
+- 0E — dynamic agent lifecycle, AgentRegistry, roster reconciliation, and
+  agents.changed notifications.
+
+Each slice must end with a usable outcome and a focused acceptance gate. Do
+not implement the later integrations merely because their settings cards or
+skill placeholders exist.
+
+## Phase 0A typed settings implementation order
 
 Implement the narrow settings vertical slice in this order:
 
@@ -74,6 +104,9 @@ Tests must run without Anthropic/OpenAI credentials and should cover:
 - preservation of requiresRestart metadata;
 - settings.updated activity/audit boundary;
 - realm/account metadata is not authorized by naming prefix alone.
+- populated runtime memory/handoff files are never staged;
+- settings/default changes do not rewrite existing agent definitions; and
+- unconfigured tmux sessions receive no capabilities.
 
 ## Required frontend behavior
 
@@ -104,6 +137,19 @@ When the native runtime begins:
 Do not turn scheduled prompts or agent-to-agent messaging on until those states
 and serialization rules are tested.
 
+## Phase 0E roster and skill test boundaries
+
+The eventual AgentRegistry tests should cover configured definitions, ignored
+runtime definitions, active pa-* session discovery, stopped agents, explicit
+create/start/stop/delete lifecycle rules, atomic roster snapshots, and
+agents.changed delivery. A tmux session with no valid definition must remain
+blocked from capability access.
+
+The eventual skill tests should cover every ingress path—dashboard, iMessage,
+scheduler, and agent message—through normalization, deterministic trigger
+matching, agent-eligible skill filtering, context injection, and native skill
+discovery. No routing LLM is permitted.
+
 ## Workspace checks
 
 The current npm lifecycle scripts validate only the scaffold until actual
@@ -115,7 +161,9 @@ npm run build
 npm run typecheck
 npm test
 npm run lint
+npm run privacy-check
 ~~~
 
 All settings tests must use local/in-memory fixtures. No provider token should be
-required for build, typecheck, unit tests, or the Settings route test harness.
+required for build, typecheck, unit tests, the Settings route test harness, or
+the privacy check.

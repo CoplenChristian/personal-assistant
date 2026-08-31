@@ -67,9 +67,10 @@ Each slice must end with a usable outcome and a focused acceptance gate. Do
 not implement the later integrations merely because their settings cards or
 skill placeholders exist.
 
-The authorization-context contract is part of the Phase 0A design even though
-external integrations are deferred. Later providers must not retrofit
-provenance after capability calls already exist.
+The basic capability-policy contract is part of the Phase 0A design even
+though external integrations are deferred. The broker will provide a stable
+local integration interface with deterministic guardrails; it will not become
+an IAM system around individual native-agent turns.
 
 ## Phase 0A typed settings implementation order
 
@@ -111,9 +112,8 @@ Tests must run without Anthropic/OpenAI credentials and should cover:
 - populated runtime memory/handoff files are never staged;
 - settings/default changes do not rewrite existing agent definitions; and
 - unconfigured tmux sessions receive no capabilities;
-- model-supplied source/initiator/allowed-capability fields are not trusted;
-- expired or session-mismatched authorization contexts are rejected; and
-- a scheduled job cannot use a capability outside its explicit subset.
+- scheduled jobs cannot use a capability outside their explicit subset; and
+- the broker's guarantee is limited to operations invoked through the pa interface.
 
 ## Required frontend behavior
 
@@ -157,24 +157,26 @@ scheduler, and agent message—through normalization, deterministic trigger
 matching, agent-eligible skill filtering, context injection, and native skill
 discovery. No routing LLM is permitted.
 
-## Authorization and bypass tests before integrations
+## Integration readiness under the local-trust model
 
-Before Phase 3, 4, or 5 is enabled, add local tests and an implementation
-review for the threat-model gate in [threat-model.md](threat-model.md). At a
-minimum, test that:
+Before Phase 3, 4, 5, or 7 is enabled, add local tests and an implementation
+review for the normal guardrails in [threat-model.md](threat-model.md). At a
+minimum, verify:
 
-- email or browser content cannot grant a messaging/calendar/mail-write
-  capability;
-- a model cannot widen an authorization context by changing request fields;
-- an authorization context is bound to the correct agent/session and expires;
-- message.reply requires the verified inbound message reference in context;
-- a scheduled request is the intersection of global policy, agent upper bound,
-  and job subset; and
-- broker/helper credentials and sensitive runtime state are not available via
-  the native agent's environment or an equivalent alternate provider path.
+- the pa interface exposes only the intended provider operations;
+- email send/reply/forward/draft-send remain absent;
+- messaging validates verified contacts, exact participants, realm, and rate limits;
+- account authorization uses stored realm metadata rather than name prefixes;
+- credentials stay in Keychain or integration-specific protected state and
+  never enter skills, prompts, logs, or generic settings storage;
+- scheduled jobs use only their declared subset within the agent upper bound;
+- message.reply requires a concrete verified inbound message reference; and
+- activity records capture successful and blocked broker operations.
 
-If the last condition cannot be demonstrated, keep the integration disabled or
-manual-only rather than treating the broker as a complete security boundary.
+These checks validate harness-managed operations. They do not attempt to prove
+that another trusted local agent or application cannot use an unrelated path
+available to the same macOS user. Stronger OS isolation remains optional
+hardening rather than a prerequisite for normal integration use.
 
 ## Workspace checks
 

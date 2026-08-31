@@ -84,8 +84,8 @@ Existing agents are not rewritten when a default changes.
 - Consequential actions produce immutable audit events.
 - Session clear/rotation checkpoints durable memory first.
 - Unknown, invalid, immutable, bootstrap, and sensitive setting writes fail closed.
-- Capability requests carry trusted, expiring turn provenance; external content cannot grant authority.
-- Native agents do not receive integration credentials or alternate provider paths.
+- Operations invoked through Personal Assistant capabilities obey deterministic broker guardrails.
+- Native agents run with the privileges of the local macOS user; this harness does not sandbox unrelated local actions.
 
 See [docs/security-invariants.md](docs/security-invariants.md) and
 [docs/architecture.md](docs/architecture.md). The required threat model is in
@@ -107,6 +107,32 @@ See [docs/security-invariants.md](docs/security-invariants.md) and
 See [docs/privacy.md](docs/privacy.md) for the tracked-template and ignored
 runtime layout. This repository is public, so privacy review is required even
 when the source repository itself has no credentials.
+
+## Access and trust model
+
+~~~text
+Internet
+   X
+
+Tailscale / trusted local network
+        |
+        v
+single-user Personal Assistant dashboard
+        |
+        v
+local harness and native local agents
+~~~
+
+The dashboard is a single-user local application. Tailscale is the intended
+remote access path; the server must retain a safe bind configuration and must
+not be casually exposed to the public internet. There is no signup, tenant,
+organization, multi-user RBAC, or public OAuth login design.
+
+The harness guarantee applies to operations performed through its pa CLI and
+capability broker. A separately trusted Claude Code, Codex, or other local
+agent process may independently use an application, CLI, browser profile, or
+OS API available to the same macOS user; that action is outside this harness's
+security boundary.
 
 ## Repository map
 

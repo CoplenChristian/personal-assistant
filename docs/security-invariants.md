@@ -7,7 +7,7 @@ request is malformed.
 1. There is no email send API.
 2. An unverified phone number can never be an outbound iMessage destination.
 3. Agents cannot create or modify verified contacts.
-4. Email, web, and message content never grants permissions.
+4. Email, web, and message content is untrusted input and cannot change static capability policy.
 5. Work and personal account IDs are always explicit.
 6. Security rules are enforced outside skills.
 7. Secrets never live in the skill repository or generic settings storage.
@@ -18,7 +18,7 @@ request is malformed.
 12. Every consequential external action creates an immutable activity event.
 13. A giant transcript is never considered durable memory.
 14. Session rotation checkpoints before closing the current context.
-15. If authorization is uncertain, the operation fails closed.
+15. If a broker operation is unsupported or fails policy validation, it fails closed.
 16. Settings cannot weaken a hard security invariant.
 17. Bootstrap startup values cannot be overridden from the database.
 18. Repository defaults are not rewritten with user-specific preferences.
@@ -29,8 +29,8 @@ request is malformed.
 23. Tracked memory, handoff, user-context, transcript, cache, profile, screenshot, and download files are never populated private state.
 24. An unconfigured or policy-invalid tmux session receives no capabilities.
 25. Roster changes do not grant capabilities; they only update explicitly validated agent state.
-26. Capability requests use a server-issued, expiring authorization context; model-supplied provenance cannot widen it.
-27. The broker is not considered a hard integration boundary until native-agent alternate paths are closed or the integration remains disabled/manual-only.
+26. Operations invoked through the pa capability interface obey deterministic broker guardrails.
+27. The harness does not claim to contain native agents or unrelated local paths available to the same macOS user.
 
 ## Realm and account boundary
 
@@ -63,11 +63,11 @@ invalid values, immutable keys, bootstrap keys, and sensitive values are
 rejected server-side. User preferences are SQLite overrides; Git-tracked YAML
 remains the repository default source.
 
-Capability requests also require a trusted turn context containing the source,
-initiator, agent/session binding, realm, allowed capabilities, source
-reference, and expiry. The broker authorizes the intersection of global hard
-policy, agent upper bound, turn context, and scheduled-job subset when
-applicable. It must not accept those fields as assertions from model output.
+The broker does not independently authorize individual model turns. Native
+agents are trusted to the same extent as the local macOS user. The broker
+enforces deterministic restrictions on operations invoked through pa, while
+unrelated actions taken through another local application, CLI, browser
+profile, or OS API are outside this harness boundary.
 
 ## Scheduled capability boundary
 
@@ -112,9 +112,8 @@ BLOCKED: work agent requested a personal account
 BLOCKED: email send operation is unavailable
 BLOCKED: setting attempted to weaken a locked invariant
 BLOCKED: scheduled job requested a capability outside its explicit subset
-BLOCKED: capability request has expired or mismatched turn context
-BLOCKED: integration alternate path is not contained
+BLOCKED: capability operation is unsupported or fails a broker policy check
 ~~~
 
 See [threat-model.md](threat-model.md) for the native-agent trust model and
-the pre-integration security gate.
+the limits of the broker's integration boundary.

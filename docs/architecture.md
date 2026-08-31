@@ -37,12 +37,14 @@ tmux session pa-<agent-id>
       '- native claude or codex process
 ~~~
 
-The broker is the hard authorization boundary for integrations only when the
-native agents cannot access integration credentials or equivalent alternate
-execution paths. Skills describe how to request a capability; they do not
-authorize it. The native CLI is the reasoning/runtime boundary. The dashboard
-is an observation and administration surface, not a second model conversation.
-See docs/threat-model.md for the required trust and containment conditions.
+The broker is the stable integration boundary for operations invoked through
+the pa CLI. It centralizes provider access, validation, realm/account checks,
+secrets handling, and audit records. It is not a per-turn LLM authorization or
+IAM system, and it does not contain native agents from using unrelated local
+applications or APIs. Skills describe how to request a capability; they do not
+replace broker guardrails. The dashboard is an observation and administration
+surface, not a second model conversation. See docs/threat-model.md for the
+single-user trust model.
 
 ## 2. Configuration lifecycle
 
@@ -324,53 +326,12 @@ parameters
 request_id
 ~~~
 
-The broker checks the request against policy and fails closed when
-authorization is uncertain.
-
-### 6.1 Trusted turn authorization context
-
-Every turn that can lead to a capability request receives a server-issued
-authorization context:
-
-~~~text
-turn_context_id
-source
-initiated_by
-agent_id
-session_id
-realm
-allowed_capabilities
-source_reference
-expires_at
-~~~
-
-Source references may include a scheduled job ID, dashboard request ID,
-verified sender contact ID, or verified inbound message ID. The broker
-resolves the context from trusted harness state and verifies an opaque
-context credential bound to the agent and native session. It does not trust
-model-supplied source, initiator, realm, or allowed-capability fields.
-
-The effective authorization is:
-
-~~~text
-hard global policy
-    intersect
-agent capability upper bound
-    intersect
-turn authorization context
-    intersect
-scheduled-job capability subset, when applicable
-~~~
-
-Examples include dashboard_user with the capabilities derived from the
-explicit user request, scheduled_job with the named job subset,
-verified_imessage with only a concrete verified inbound reply reference, and
-email_content/browser_content with no capability authority. An agent-message
-may carry task context but cannot grant new external capability authority.
-
-Contexts expire, are bound to their source/agent/session, and are included in
-activity records. External content can provide data but can never widen a
-turn's authorization context.
+The broker checks the request against deterministic policy and fails closed
+when the requested operation is not supported or the resource/realm does not
+match. It does not attempt to independently authenticate or authorize each
+individual LLM turn. Native agents are trusted to the same extent as the
+local macOS user; the broker guarantee applies to operations that come through
+the broker.
 
 Realm enforcement must use explicit persisted account metadata, not account-ID
 string prefixes as the security boundary. A future account record is:
@@ -472,7 +433,7 @@ No second LLM is introduced solely to route a prompt. If Claude Code and
 Codex need different native directories, adapters, symlinks, or generated
 views may project the canonical catalog into those layouts. The repository
 catalog remains the source of truth. External content can trigger a skill
-match but can never grant a capability.
+match but cannot change broker policy or add a capability.
 
 ## 11. Dashboard activity model
 
@@ -493,9 +454,8 @@ selected local day/timezone, with zero/empty states when no event exists:
 - agent starts, stops, clears, rotations, and roster changes.
 
 Each event carries timestamp, agent, realm, category, operation, target,
-status, duration, structured metadata, turn_context_id, source, and source
-reference when applicable. A provider card being unconfigured must not create
-a fake successful activity event.
+status, duration, and structured metadata. A provider card being unconfigured
+must not create a fake successful activity event.
 
 ## 12. Shared SOUL.md provenance
 
@@ -531,34 +491,46 @@ privacy-check must inspect tracked/staged paths and reject forbidden runtime
 artifacts, credential-shaped content, and personal-data directories before a
 public push. See docs/privacy.md.
 
-## 14. Threat model and pre-integration gate
+## 14. Local trust and integration boundary
 
-Native Claude/Codex processes may eventually have shell and browser access as
-the same macOS user. They are therefore partially trusted reasoning runtimes,
-not security principals. The broker cannot be called a hard integration
-boundary if an agent can read provider credentials, modify security state, or
-use an equivalent provider path directly.
+This is a single-user application intended to run on one Mac, with remote
+dashboard access restricted through Tailscale or another trusted local network.
+Native Claude Code, Codex, and similar local agent harnesses run with the
+privileges of the same macOS user. The Personal Assistant Harness does not
+claim to sandbox them or prevent them from independently using another
+application, CLI, browser profile, or OS API.
 
-Before Phase 3, 4, or 5 is marked usable, the project must demonstrate that:
+The access model is:
 
-- provider credentials are available only to the broker/helper process through
-  Keychain controls or an equivalent protection model;
-- agent environments, prompts, files, and logs contain no provider credentials
-  or broker signing secrets;
-- provider CLIs/endpoints are not directly usable with agent-accessible
-  credentials;
-- security-sensitive runtime state has defined ownership, permissions, and
-  tamper detection;
-- browser profiles cannot bypass prohibited actions and are separated by realm;
-- authorization contexts are source/session-bound and expire; and
-- prompt-injection tests cannot route email, web, or message content into a
-  prohibited external action.
+~~~text
+Internet
+   X
 
-If these conditions cannot be proven, the integration remains disabled or
-manual-only. Stronger OS accounts or sandboxing in Phase 8 are defense in
-depth, not a reason to defer this gate.
+Tailscale / trusted local network
+        |
+        v
+single-user Personal Assistant dashboard
+        |
+        v
+local harness and native local agents
+~~~
 
-See docs/threat-model.md for the detailed threat model and review questions.
+There is no signup, tenant, organization, multi-user RBAC, password-reset, or
+public OAuth-login design.
+
+The security guarantee is narrower and explicit: operations performed through
+the pa CLI and capability broker obey the broker's deterministic guardrails.
+For example, pa mail send fails because no mail-send capability exists, even
+though a separately trusted local process could open Gmail and send mail by a
+different path. That unrelated action is outside this harness boundary.
+
+Normal integration readiness still requires credential hygiene, narrow APIs,
+explicit account realms, provider-specific restrictions, and audit coverage.
+It does not require proving that every possible alternate path on the Mac has
+been closed. Stronger process isolation or separate macOS accounts remain
+optional Phase 8 hardening.
+
+See docs/threat-model.md for the local-trust model and its non-guarantees.
 
 ## 15. Technology choices
 

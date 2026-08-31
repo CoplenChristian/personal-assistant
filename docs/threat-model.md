@@ -1,153 +1,188 @@
-# Authorization context and threat model
+# Local-trust threat model
 
-This is a planning gate for the architecture. It defines what the capability
-broker can prove and what it cannot safely claim while native agents have
-shell or browser access.
+This document defines the deployment assumptions and the narrower security
+claim for the Personal Assistant Harness. It replaces the earlier design that
+attempted to authorize individual model turns.
 
-## Security claim
+## Deployment and access
 
-The capability broker is the hard authorization boundary for integrations only
-when native agents cannot access integration credentials or equivalent
-alternate execution paths. Native Claude/Codex processes are reasoning
-runtimes, not trusted security principals.
+This is a single-user personal assistant running on one Mac. Other native
+local harnesses such as Claude Code, Codex, and similar tools may run under the
+same macOS user.
 
-The plan therefore treats native agents as partially trusted:
-
-- they may reason, use approved native tools, and request broker capabilities;
-- they may be exposed to malicious external content;
-- they must not receive provider credentials or broker signing secrets; and
-- they must not be able to reach an integration through a second path that
-  bypasses broker policy.
-
-Email, web, and inbound message content is untrusted. Human ingress and
-explicit human administration are trusted sources, subject to the hard global
-policy.
-
-## Trusted authorization context
-
-Every agent turn that can result in a capability request receives a
-server-issued authorization context:
+Remote dashboard access is intended to use Tailscale or another trusted local
+network:
 
 ~~~text
-turn_context_id
-source
-initiated_by
-agent_id
-session_id
-realm
-allowed_capabilities
-source_reference
-expires_at
+Internet
+   X
+
+Tailscale / trusted local network
+        |
+        v
+single-user Personal Assistant dashboard
+        |
+        v
+local harness and native local agents
 ~~~
 
-Source-specific references may include:
+The server retains a safe bind configuration and must not be casually exposed
+to the public internet. This is not a cloud multi-user application, so there
+is no signup, registration, tenant, organization, multi-user RBAC, password
+reset, or public OAuth login design.
+
+## Trust model
+
+Native Claude Code, Codex, and other local agent harnesses are trusted to the
+same extent as the macOS user running them. They are not separately
+authenticated security principals, and this application does not claim to
+sandbox them.
+
+Email, web pages, documents, and inbound messages remain untrusted input.
+System/agent instructions, skill procedures, narrow APIs, deterministic
+capability restrictions, and explicit user-facing confirmations provide
+defense in depth against untrusted content.
+
+## What the harness guarantees
+
+The harness guarantees that operations invoked through its pa CLI and
+capability broker obey deterministic product guardrails:
+
+- unsupported capabilities are unavailable by construction;
+- realm/account checks use explicit stored account metadata;
+- credentials are kept in Keychain or integration-specific protected state;
+- provider-specific restrictions are applied at the integration boundary;
+- consequential broker operations are audited; and
+- blocked operations are visible in activity.
+
+For example, pa mail send fails because no email-send capability exists.
+
+## What the harness does not guarantee
+
+A separately trusted local Claude Code, Codex, or other process may independently
+open Gmail in a browser, invoke another provider CLI, use another browser
+profile, query an OS API, or otherwise act with the privileges of the same
+macOS user. That action is outside the Personal Assistant Harness security
+boundary.
+
+The harness therefore does not claim to prevent unrelated local applications or
+agent harnesses from performing actions that the pa broker would block. It
+protects and constrains harness-managed capabilities; it does not turn the Mac
+into a complete sandbox.
+
+## Broker role
+
+Keep the pa CLI and capability broker as the stable local integration
+interface:
 
 ~~~text
-scheduled_job_id
-verified_sender_contact_id
-verified_inbound_message_id
-dashboard_request_id
+pa mail ...
+pa message ...
+pa reminder ...
+pa calendar ...
+pa memory ...
+pa documents ...
+pa agents ...
+pa browser ...
 ~~~
 
-The context is persisted or otherwise verifiable by the harness. The broker
-does not trust model-supplied values for source, initiator, realm, or allowed
-capabilities. The request must carry an opaque broker-issued context
-credential bound to the agent and native session; the credential expires and
-cannot be widened by the model.
+The broker centralizes integration abstraction, validation, explicit
+realm/account checks, secrets handling, and activity recording. It does not
+implement IAM around Claude/Codex or make an independent decision about the
+meaning of every natural-language model turn.
 
-Examples:
+## Deterministic guardrails
 
-| Source | Trusted authority |
-| --- | --- |
-| dashboard_user | The trusted dashboard ingress derives the allowed capability set from the explicit user action/request |
-| scheduled_job | The named job's explicit capability subset |
-| verified_imessage | Reply only to the verified inbound message reference, subject to channel policy |
-| agent_message | Task context only; it cannot grant new external capability authority |
-| email_content | No capability authority |
-| browser_content | No capability authority |
+The following remain capability/API constraints:
 
-An external document, email, web page, or inbound message can supply data for
-a response. It cannot expand the authorization context.
+### Email
 
-The initial dashboard policy may grant read-only capabilities for free-form
-requests and require an explicit structured confirmation for consequential
-writes. The important rule is that the harness computes the grant from the
-trusted ingress; later model output and external content cannot add to it.
+There is no mail.send, mail.reply, mail.forward, or draft.send capability.
+Mail is read/organize only.
 
-## Broker decision
+### Messaging
 
-For every request, the effective authorization is the intersection of:
+Outbound BlueBubbles operations require verified contact IDs. Raw arbitrary
+phone numbers, Apple-ID email recipients, groups, agent-created contacts, and
+attachments are disabled initially. Outbound and blocked operations are
+audited. message.reply requires a concrete verified inbound message reference.
+
+### Realms and accounts
+
+Future account records contain account_id, provider, display_name, realm,
+credential_ref, and enabled. The stored realm is the authorization boundary;
+account-name prefixes are naming defaults or migration hints only. There is no
+silent fallback between work and personal accounts.
+
+### Secrets and privacy
+
+Credentials never live in skills, Git, generic Settings storage, prompts, or
+runtime logs. Generated memory, handoffs, local overrides, transcripts,
+browser profiles, caches, screenshots, downloads, and databases stay in the
+ignored runtime layout. Personal documents stay in the external vault.
+
+## External content
+
+External content may inform an answer, but skills and agent instructions tell
+the native runtime not to treat it as trusted operating guidance or permission
+to perform unrelated actions.
+
+The enforcement model is intentionally layered:
 
 ~~~text
-hard global policy
-    intersect
-agent capability upper bound
-    intersect
-turn authorization context
-    intersect
-scheduled-job subset, when the source is a scheduled job
+human/network application boundary
+        +
+agent/system instructions
+        +
+deterministic broker restrictions
+        +
+narrow provider APIs
+        +
+explicit confirmations where useful
+        +
+activity audit
 ~~~
 
-For message.reply, the context and request must include a concrete verified
-inbound message reference. A raw phone number or a message body that happens
-to contain a request is never sufficient.
+This is defense in depth for harness-managed actions, not a claim of perfect
+containment around a trusted local macOS user.
 
-The broker records the turn_context_id, source, source_reference, and denial
-reason in the immutable activity event. This makes a blocked action explainable
-as well as blocked.
+## Scheduler
 
-## Bypass threat model
+Scheduled jobs still declare an explicit allowed_capabilities list. The
+scheduler/broker checks:
 
-A native agent may eventually have shell access and browser access as the same
-macOS user. A prompt injection could otherwise attempt to:
+~~~text
+job capability subset
+    subset of
+agent scheduled capability upper bound
+    subset of
+global capability policy
+~~~
 
-- read Keychain or filesystem credentials;
-- invoke a provider CLI or local integration endpoint directly;
-- modify the SQLite policy database;
-- use an authenticated browser session to send mail or messages;
-- call BlueBubbles without the broker; or
-- replay a broad authorization context.
+Jobs target existing logical agents and inject into their existing context.
+The scheduler applies the declared job subset and ordinary broker policy; it
+does not create a separate security identity for each run.
 
-Phase 0 does not need to solve all macOS OS isolation. It must state honestly
-that the broker is not a complete containment boundary until the alternate
-paths are closed or the integration is kept disabled.
+## Browser implication
 
-## Required pre-integration security gate
+The browser capability provided by this harness follows its normal
+realm/profile restrictions, domain policies, visible activity, and untrusted
+website-content rules.
 
-Before Phase 3, 4, or 5 is marked usable:
+The harness does not claim that a separate local Claude Code/Codex instance
+cannot open another browser profile or application. Browser restrictions apply
+to harness-managed browser operations only.
 
-- provider credentials are accessible only to the broker/helper process through
-  Keychain access controls or an equivalent protection model;
-- agent environments, prompts, files, and logs contain no provider credentials
-  or broker signing secrets;
-- provider CLIs/endpoints are not directly addressable with credentials
-  available to the agent;
-- security-sensitive runtime state has defined ownership, permissions, and
-  tamper-detection behavior;
-- browser profiles cannot provide an alternate path around prohibited actions;
-- browser profiles are realm-specific and sensitive domains/actions have
-  explicit allowlists;
-- authorization-context credentials are bound to agent/session/source and
-  expire;
-- prompt-injection tests attempt to route email, web, and message content into
-  prohibited external actions; and
-- any integration whose alternate paths cannot be proven closed remains
-  disabled or manual-only.
+## Normal integration readiness
 
-Phase 8 may add stronger OS accounts or sandboxing as defense in depth. It is
-not the first point at which the project is allowed to notice this boundary.
+Before enabling an integration, review ordinary credential handling, provider
+permissions, account realm checks, narrow API behavior, blocked-action tests,
+and audit coverage. Do not require proof that every unrelated path on the Mac
+has been closed.
 
-## Review questions
+If the harness cannot safely constrain the operation through its own
+capability interface, keep that capability disabled or manual-only. Stronger
+process isolation or separate macOS accounts remain optional future hardening,
+not a prerequisite for the normal integration roadmap.
 
-Before enabling a consequential provider, reviewers should be able to answer:
-
-1. What process holds the credential?
-2. Can the native agent read or reuse it?
-3. What prevents a direct provider call outside the broker?
-4. What trusted ingress creates the authorization context?
-5. What exact capability subset is allowed for this turn/job?
-6. What source reference is required for the action?
-7. What immutable audit event proves the decision?
-8. What happens when any answer is uncertain?
-
-An uncertain answer means the provider remains disabled.
+See docs/security-invariants.md and docs/privacy.md for the related boundaries.

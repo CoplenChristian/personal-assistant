@@ -14,8 +14,7 @@ or bootstrap-only values.
 Scope:
 
 - typed settings registry shared by backend validation and UI metadata;
-- trusted per-turn authorization context contract, even before external
-  integrations are enabled;
+- basic capability-policy/configuration contracts needed by later integrations;
 - repository defaults loaded from policies/defaults/runtime.yaml;
 - bootstrap resolution for PA_RUNTIME_DIR, PA_SERVER_HOST, PA_SERVER_PORT, and
   the fixed tmux prefix;
@@ -46,9 +45,6 @@ Acceptance gate:
 - [ ] Frontend controls are accessible and keyboard usable.
 - [ ] Tracked files use safe templates; generated personal state is ignored.
 - [ ] npm run privacy-check passes before public pushes.
-- [ ] Broker requests resolve an opaque, server-issued authorization context;
-  model-supplied provenance fields cannot widen it.
-- [ ] Contexts are bound to agent/session/source and expire.
 - [ ] Tests run without Anthropic/OpenAI credentials.
 
 ## Phase 0B — One Claude agent persisted in tmux
@@ -181,21 +177,17 @@ Acceptance gate:
 - [ ] Updating a file invalidates stale derived memory.
 - [ ] No personal document is committed to this repository.
 
-## Pre-integration security gate
+## Integration readiness
 
-This is an architecture gate, not a deferred Phase 8 task. It must pass before
-Phase 3, 4, or 5 is marked usable:
+Before each external integration is enabled, verify normal credential hygiene,
+narrow provider APIs, explicit account realms, deterministic capability
+restrictions, blocked-action tests, and activity coverage. This is a review of
+harness-managed operations, not a requirement to prove that every unrelated
+path available to the same macOS user has been closed.
 
-- [ ] Native agents have no provider credentials or broker signing secrets.
-- [ ] Broker/helper processes are the only credential holders.
-- [ ] Provider CLIs/endpoints cannot be used through an alternate agent-accessible path.
-- [ ] Security-sensitive runtime state has defined ownership, permissions, and tamper detection.
-- [ ] Browser profiles cannot bypass prohibited actions and are separated by realm.
-- [ ] Prompt-injection tests cover email, web, and inbound-message attempts.
-- [ ] Any integration that cannot meet the gate remains disabled or manual-only.
-
-See [threat-model.md](threat-model.md) for the threat model and evidence
-required at this gate.
+The native-agent trust model and its non-guarantees are documented in
+[threat-model.md](threat-model.md). Stronger process isolation or separate
+macOS accounts remain optional Phase 8 hardening.
 
 ## Phase 3 — iCloud actions
 

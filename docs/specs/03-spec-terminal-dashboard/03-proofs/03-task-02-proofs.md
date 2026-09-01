@@ -91,6 +91,9 @@ Mode lifecycles.
 
 **Result:** 17 dashboard tests passed. No separate prompt input surface was
 introduced; the terminal remains the only interactive input boundary.
+The terminal renderer also enables xterm line-ending conversion so tmux's
+line-oriented capture/stream data starts each row at the correct column; the
+renderer regression assertion covers this setting.
 
 ## Artifact: Hosted browser proof
 

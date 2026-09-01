@@ -61,7 +61,7 @@ export function TerminalSurface({ scrollbackLines }: TerminalSurfaceProps) {
       scrollback: scrollbackLines,
       disableStdin: false,
       cursorBlink: false,
-      convertEol: false,
+      convertEol: true,
       fontFamily: "SF Mono, JetBrains Mono, Courier New, monospace",
       fontSize: 13,
       theme: {

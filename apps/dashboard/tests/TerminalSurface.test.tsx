@@ -42,6 +42,7 @@ const { FakeWebSocket, FakeTerminal, FakeFitAddon } = vi.hoisted(() => {
 
   class HoistedFakeTerminal {
     static instances: HoistedFakeTerminal[] = [];
+    readonly options: Record<string, unknown>;
     readonly write = vi.fn();
     readonly open = vi.fn();
     readonly loadAddon = vi.fn();
@@ -62,7 +63,8 @@ const { FakeWebSocket, FakeTerminal, FakeFitAddon } = vi.hoisted(() => {
       return { dispose: vi.fn() };
     });
 
-    constructor() {
+    constructor(options: Record<string, unknown>) {
+      this.options = options;
       HoistedFakeTerminal.instances.push(this);
     }
 
@@ -111,6 +113,7 @@ describe("TerminalSurface", () => {
     const terminal = FakeTerminal.instances[0]!;
 
     expect(socket.url).toBe("ws://localhost:3000/ws/agents/personal/terminal");
+    expect(terminal.options).toMatchObject({ convertEol: true });
     expect(screen.getByText("Connecting")).toBeInTheDocument();
 
     act(() => socket.emit("open"));

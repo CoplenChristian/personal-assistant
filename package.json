@@ -4,16 +4,18 @@
   "private": true,
   "description": "A thin local harness around native Claude Code and Codex runtimes.",
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*",
-    "cli/*"
-  ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "build": "dotnet build PersonalAssistant.sln && npm --prefix apps/dashboard run build",
+    "test": "dotnet test PersonalAssistant.sln && npm --prefix apps/dashboard test",
+    "typecheck": "dotnet build PersonalAssistant.sln --no-restore && npm --prefix apps/dashboard run typecheck",
+    "lint": "npm --prefix apps/dashboard run lint",
+    "server:dev": "dotnet run --project apps/server/PersonalAssistant.Server.csproj",
+    "dashboard:dev": "npm --prefix apps/dashboard run dev",
+    "dashboard:build": "npm --prefix apps/dashboard run build",
+    "dashboard:test": "npm --prefix apps/dashboard test",
+    "dashboard:typecheck": "npm --prefix apps/dashboard run typecheck",
+    "dashboard:lint": "npm --prefix apps/dashboard run lint",
+    "privacy-check": "./scripts/privacy-check.sh"
   },
   "engines": {
     "node": ">=22"

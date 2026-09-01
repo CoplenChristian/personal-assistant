@@ -1,8 +1,8 @@
 # Architecture brief
 
-This document is the current planning baseline for the Personal Assistant
-Harness. It incorporates the configuration, privacy, lifecycle, and review
-feedback without implementing the runtime or external integrations.
+This document is the current planning and implementation baseline for the
+Personal Assistant Harness. Phase 0A settings is implemented but awaiting
+review; native runtime and external integrations remain deferred.
 
 ## 1. Core principle
 

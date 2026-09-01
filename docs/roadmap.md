@@ -29,23 +29,23 @@ Scope:
 
 Acceptance gate:
 
-- [ ] Typed registry is the single metadata source for backend validation and UI rendering.
-- [ ] Repository defaults remain in Git-tracked YAML and are never rewritten by Settings.
-- [ ] PA_RUNTIME_DIR, PA_SERVER_HOST, and PA_SERVER_PORT are bootstrap/read-only.
-- [ ] tmux prefix cannot be changed in a way that orphans active sessions.
-- [ ] SQLite persists overrides only, with future global/realm/agent/integration scopes.
-- [ ] GET returns effective value, default, override state, source, editability, and restart metadata.
-- [ ] PATCH rejects unknown, invalid, immutable, bootstrap, and sensitive settings.
-- [ ] DELETE removes an override and returns to the effective default.
-- [ ] Cross-field session validation prevents hard rotation below warning.
-- [ ] settings.updated is emitted at the activity/audit boundary.
-- [ ] Safety posture is visible but cannot be weakened.
-- [ ] Integration cards are honest not-configured/phase states, not fake connections.
-- [ ] Settings route has loading, error, dirty, save, reset, and restart-required states.
-- [ ] Frontend controls are accessible and keyboard usable.
-- [ ] Tracked files use safe templates; generated personal state is ignored.
-- [ ] scripts/privacy-check.sh passes before public pushes.
-- [ ] Tests run without Anthropic/OpenAI credentials.
+- [x] Typed registry is the single metadata source for backend validation and UI rendering.
+- [x] Repository defaults remain in Git-tracked YAML and are never rewritten by Settings.
+- [x] PA_RUNTIME_DIR, PA_SERVER_HOST, and PA_SERVER_PORT are bootstrap/read-only.
+- [x] tmux prefix cannot be changed in a way that orphans active sessions.
+- [x] SQLite persists overrides only, with future global/realm/agent/integration scopes.
+- [x] GET returns effective value, default, override state, source, editability, and restart metadata.
+- [x] PATCH rejects unknown, invalid, immutable, bootstrap, and sensitive settings.
+- [x] DELETE removes an override and returns to the effective default.
+- [x] Cross-field session validation prevents hard rotation below warning.
+- [x] settings.updated is emitted at the activity/audit boundary.
+- [x] Safety posture is visible but cannot be weakened.
+- [x] Integration cards are honest not-configured/phase states, not fake connections.
+- [x] Settings route has loading, error, dirty, save, reset, and restart-required states.
+- [x] Frontend controls are accessible and keyboard usable.
+- [x] Tracked files use safe templates; generated personal state is ignored.
+- [x] scripts/privacy-check.sh passes before public pushes.
+- [x] Tests run without Anthropic/OpenAI credentials.
 
 ## Phase 0B — One Claude agent persisted in tmux
 

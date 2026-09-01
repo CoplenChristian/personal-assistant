@@ -6,13 +6,13 @@ the local dashboard. The native CLIs remain the model runtimes.
 
 ## Status
 
-This repository is an architecture and implementation scaffold. The native
-agent runtime and the configuration/settings vertical slice are not implemented
-yet. The documents in this repository are the current design baseline for the
-next review round.
+This repository is an architecture scaffold with the Phase 0A
+configuration/settings vertical slice implemented and reviewed. The native
+agent runtime and external integrations remain deferred. The documents in this
+repository are the current design and implementation baseline.
 
-The initial build should start with configuration/settings because it gives
-the later runtime a single lifecycle for defaults, overrides, validation, and
+The first implementation slice is configuration/settings because it gives the
+later runtime a single lifecycle for defaults, overrides, validation, and
 effective values.
 
 ## Architectural boundary
@@ -152,12 +152,12 @@ runtime/              Ignored local state created when the harness runs
 
 ## Roadmap
 
-Phase 0 now includes the typed configuration registry, SQLite override store,
-localhost Settings API, and real Settings route alongside the foundational
-native agent harness. Later phases add document indexing, external
-integrations, browser providers, scheduling, collaboration, and hardening.
+Phase 0A now includes the typed configuration registry, SQLite override store,
+localhost Settings API, real Settings route, privacy check, and providerless
+tests. Later Phase 0 slices add the native agent harness; later phases add
+document indexing, external integrations, browser providers, scheduling,
+collaboration, and hardening.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance gates and
 [docs/development.md](docs/development.md) for the implementation order.
-The planned pre-push privacy gate is scripts/privacy-check.sh; it is not
-implemented until the first implementation slice.
+Run scripts/privacy-check.sh before staging or pushing public changes.

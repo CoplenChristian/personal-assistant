@@ -1,8 +1,7 @@
 # Development notes
 
-This repository is still planning-level. The settings/configuration slice is
-the next implementation target; the native agent runtime and external
-integrations remain deferred.
+Phase 0A settings/configuration is implemented and reviewed. The native agent
+runtime and external integrations remain deferred.
 
 ## Local prerequisites
 
@@ -182,8 +181,8 @@ hardening rather than a prerequisite for normal integration use.
 ## Workspace checks
 
 The current npm lifecycle scripts validate only the scaffold until actual
-implementation scripts are added. Once the settings slice exists, the
-applicable checks should include:
+The repository-level checks cover the .NET solution, React dashboard, and
+privacy boundary:
 
 ~~~sh
 dotnet build PersonalAssistant.sln

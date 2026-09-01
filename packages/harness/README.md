@@ -1,6 +1,6 @@
 # Harness core
 
-The future C#/.NET class library for the reusable local control plane.
+The C#/.NET class library for the reusable Phase 0A local control plane.
 
 Planned domains:
 

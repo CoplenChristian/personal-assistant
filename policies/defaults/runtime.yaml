@@ -1,14 +1,41 @@
 version: 1
+
+appearance:
+  theme: system
+  browser_scrollback_lines: 5000
+
+agents:
+  defaults:
+    runtime: claude
+    auto_start: false
+
 tmux:
   session_prefix: pa-
   history_lines: 15000
+
 terminal_logs:
   active_warning_bytes: 26214400
   rotated_files: 5
+
 native_sessions:
   warning_bytes: 26214400
   rotate_bytes: 52428800
   archive_ttl_days: 30
+
+documents:
+  automatic_indexing: false
+  automatic_toc_regeneration: false
+
+memory:
+  max_fts5_results: 100
+  auto_materialize_generated_memory: false
+
 scheduler:
+  timezone: local
+  missed_run_policy: skip
+  max_queued_prompts_per_agent: 10
   one_injected_prompt_per_agent: true
   scheduled_jobs_target_logical_agent: true
+
+safety:
+  checkpoint_before_rotation: true

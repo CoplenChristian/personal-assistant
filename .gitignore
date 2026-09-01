@@ -5,6 +5,11 @@ dist/
 build/
 coverage/
 .vite/
+bin/
+obj/
+TestResults/
+.eslintcache
+.vs/
 
 # Local configuration and credentials
 .env
@@ -16,12 +21,19 @@ coverage/
 *.pfx
 *.token
 *.jsonl
+*.db
+*.db-*
+*.sqlite3
+*.sqlite3-*
 storage-state*.json
 cookies*
 credentials/
 secrets/
 oauth/
 tokens/
+cache/
+caches/
+vault/
 
 # Harness runtime state: SQLite, logs, roster, and session artifacts
 runtime/*

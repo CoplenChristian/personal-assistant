@@ -1,5 +1,8 @@
 # Dashboard
 
-The future React + Vite local dashboard. It should render the actual native
-CLI stream through xterm.js and WebSockets rather than inventing a parallel
-assistant transcript.
+React/Vite local dashboard foundation for the Phase 0A Settings slice. The
+route loads the ASP.NET Core settings API and renders registry metadata rather
+than maintaining a second settings policy list.
+
+The native CLI terminal and activity surfaces remain deferred. This UI does
+not probe providers, store credentials, or invent connected integration state.

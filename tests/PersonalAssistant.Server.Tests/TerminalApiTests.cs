@@ -46,6 +46,9 @@ public sealed class TerminalApiTests
         Assert.Equal("snapshot", snapshot.RootElement.GetProperty("type").GetString());
         Assert.True(snapshot.RootElement.GetProperty("hydrationBoundary").GetBoolean());
         Assert.Equal("fixture snapshot\r\n", snapshot.RootElement.GetProperty("data").GetString());
+        using var initialState = await ReceiveJsonAsync(socket);
+        Assert.Equal("state", initialState.RootElement.GetProperty("type").GetString());
+        Assert.Equal("idle", initialState.RootElement.GetProperty("state").GetString());
 
         File.AppendAllText(factory.Executor.SinkPath, "fixture output\r\n");
         using var output = await ReceiveJsonAsync(socket);
@@ -65,8 +68,10 @@ public sealed class TerminalApiTests
         {
             using var firstHello = await ReceiveJsonAsync(firstSocket);
             using var firstSnapshot = await ReceiveJsonAsync(firstSocket);
+            using var firstState = await ReceiveJsonAsync(firstSocket);
             Assert.Equal("hello", firstHello.RootElement.GetProperty("type").GetString());
             Assert.Equal(0, firstSnapshot.RootElement.GetProperty("sequence").GetInt64());
+            Assert.Equal("idle", firstState.RootElement.GetProperty("state").GetString());
             await firstSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "reconnect", CancellationToken.None);
         }
 
@@ -74,10 +79,12 @@ public sealed class TerminalApiTests
         using var secondSocket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
         using var secondHello = await ReceiveJsonAsync(secondSocket);
         using var secondSnapshot = await ReceiveJsonAsync(secondSocket);
+        using var secondState = await ReceiveJsonAsync(secondSocket);
 
         Assert.Equal("hello", secondHello.RootElement.GetProperty("type").GetString());
         Assert.Equal("snapshot", secondSnapshot.RootElement.GetProperty("type").GetString());
         Assert.Equal(0, secondSnapshot.RootElement.GetProperty("sequence").GetInt64());
+        Assert.Equal("idle", secondState.RootElement.GetProperty("state").GetString());
         Assert.Equal(2, factory.Executor.CaptureCount);
         Assert.Equal(2, factory.Executor.PipeStartCount);
 
@@ -128,6 +135,125 @@ public sealed class TerminalApiTests
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
     }
 
+    [Fact]
+    public async Task Websocket_delivers_input_ack_and_state_transitions_without_echoing_input()
+    {
+        using var factory = new TerminalApiFactory();
+        var socketClient = factory.Server.CreateWebSocketClient();
+        using var socket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
+        await ReceiveInitialFramesAsync(socket);
+
+        var input = JsonSerializer.Serialize(new { type = "input", sequence = 7, data = "echo private text\r\n" });
+        await socket.SendAsync(Encoding.UTF8.GetBytes(input), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+
+        var responseTypes = new List<string>();
+        var responseStates = new List<string>();
+        for (var index = 0; index < 3; index++)
+        {
+            using var response = await ReceiveJsonAsync(socket);
+            responseTypes.Add(response.RootElement.GetProperty("type").GetString()!);
+            if (response.RootElement.GetProperty("type").GetString() == "state")
+            {
+                responseStates.Add(response.RootElement.GetProperty("state").GetString()!);
+            }
+
+            Assert.DoesNotContain("echo private text", response.RootElement.GetRawText(), StringComparison.Ordinal);
+        }
+
+        Assert.Contains("inputAck", responseTypes);
+        Assert.Contains("busy", responseStates);
+        Assert.Contains("idle", responseStates);
+        Assert.Single(factory.DeliveredInputs);
+        Assert.Equal("echo private text\r\n", factory.DeliveredInputs[0].Data);
+
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Websocket_resizes_the_healthy_pane_with_typed_dimensions()
+    {
+        using var factory = new TerminalApiFactory();
+        var socketClient = factory.Server.CreateWebSocketClient();
+        using var socket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
+        await ReceiveInitialFramesAsync(socket);
+
+        var resize = JsonSerializer.Serialize(new { type = "resize", columns = 120, rows = 36 });
+        await socket.SendAsync(Encoding.UTF8.GetBytes(resize), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+        await WaitForAsync(() => factory.Executor.Commands.Any(command => command[0] == "resize-pane"));
+
+        var resizeCommand = factory.Executor.Commands.Last(command => command[0] == "resize-pane");
+        Assert.Equal(["resize-pane", "-t", "test-pa-personal:0.0", "-x", "120", "-y", "36"], resizeCommand);
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Websocket_reports_resize_unavailability_as_a_stable_error_and_state()
+    {
+        using var factory = new TerminalApiFactory(resizeUnavailable: true);
+        var socketClient = factory.Server.CreateWebSocketClient();
+        using var socket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
+        await ReceiveInitialFramesAsync(socket);
+
+        var resize = JsonSerializer.Serialize(new { type = "resize", columns = 120, rows = 36 });
+        await socket.SendAsync(Encoding.UTF8.GetBytes(resize), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+        var responseTypes = new List<string>();
+        var responseCodes = new List<string>();
+        for (var index = 0; index < 2; index++)
+        {
+            using var response = await ReceiveJsonAsync(socket);
+            responseTypes.Add(response.RootElement.GetProperty("type").GetString()!);
+            if (response.RootElement.GetProperty("type").GetString() == "error")
+            {
+                responseCodes.Add(response.RootElement.GetProperty("code").GetString()!);
+            }
+        }
+
+        Assert.Contains("state", responseTypes);
+        Assert.Contains("error", responseTypes);
+        Assert.Contains("terminal_resize_unavailable", responseCodes);
+        Assert.Equal(TerminalActivityState.Error.ToString().ToLowerInvariant(), factory.TerminalState.Current.ToWireValue());
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Websocket_reconnect_after_protocol_error_starts_healthy_and_idle()
+    {
+        using var factory = new TerminalApiFactory();
+        var socketClient = factory.Server.CreateWebSocketClient();
+        using (var firstSocket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None))
+        {
+            await ReceiveInitialFramesAsync(firstSocket);
+            var invalidInput = JsonSerializer.Serialize(new { type = "input", sequence = -1, data = "invalid" });
+            await firstSocket.SendAsync(Encoding.UTF8.GetBytes(invalidInput), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+            var observed = new List<string>();
+            for (var index = 0; index < 2; index++)
+            {
+                using var response = await ReceiveJsonAsync(firstSocket);
+                observed.Add(response.RootElement.GetProperty("type").GetString()!);
+            }
+
+            Assert.Contains("state", observed);
+            Assert.Contains("error", observed);
+            await firstSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "reset state", CancellationToken.None);
+        }
+
+        await WaitForAsync(() => factory.Executor.PipeStopCount == 1);
+        using var secondSocket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
+        await ReceiveInitialFramesAsync(secondSocket);
+        Assert.Equal("idle", factory.TerminalState.Current.ToWireValue());
+        await secondSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
+    }
+
+    private static async Task ReceiveInitialFramesAsync(WebSocket socket)
+    {
+        using var hello = await ReceiveJsonAsync(socket);
+        using var snapshot = await ReceiveJsonAsync(socket);
+        using var state = await ReceiveJsonAsync(socket);
+        Assert.Equal("hello", hello.RootElement.GetProperty("type").GetString());
+        Assert.Equal("snapshot", snapshot.RootElement.GetProperty("type").GetString());
+        Assert.Equal("idle", state.RootElement.GetProperty("state").GetString());
+    }
+
     private static async Task<JsonDocument> ReceiveJsonAsync(WebSocket socket)
     {
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -159,19 +285,32 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
 {
     private readonly string runtimeDirectory = Directory.CreateTempSubdirectory("personal-assistant-terminal-api-").FullName;
     private readonly FakeTerminalExecutor executor;
+    private readonly TmuxSessionManager tmux;
     private readonly TmuxTerminalStream terminalStream;
+    private readonly TerminalInputSerializer terminalInput;
+    private readonly TerminalActivityStateTracker terminalState;
     private readonly bool healthy;
 
-    public TerminalApiFactory(bool healthy = true, string? captureOutput = null)
+    public List<TerminalInputRequest> DeliveredInputs { get; } = [];
+
+    public TerminalApiFactory(bool healthy = true, string? captureOutput = null, bool resizeUnavailable = false)
     {
         this.healthy = healthy;
-        executor = new FakeTerminalExecutor(runtimeDirectory, captureOutput);
-        terminalStream = new TmuxTerminalStream(
-            new TmuxSessionManager("test-pa-", executor, new NoopProcessInspector()),
-            runtimeDirectory);
+        executor = new FakeTerminalExecutor(runtimeDirectory, captureOutput, resizeUnavailable);
+        tmux = new TmuxSessionManager("test-pa-", executor, new NoopProcessInspector());
+        terminalStream = new TmuxTerminalStream(tmux, runtimeDirectory);
+        terminalInput = new TerminalInputSerializer(
+            "personal",
+            (request, _) =>
+            {
+                DeliveredInputs.Add(request);
+                return Task.CompletedTask;
+            });
+        terminalState = new TerminalActivityStateTracker("personal");
     }
 
     public FakeTerminalExecutor Executor => executor;
+    public TerminalActivityStateTracker TerminalState => terminalState;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -196,8 +335,14 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<IAgentSessionService>();
             services.AddSingleton<IAgentSessionService>(_ => new FakeAgentSessionService(healthy));
+            services.RemoveAll<TmuxSessionManager>();
+            services.AddSingleton(tmux);
             services.RemoveAll<TmuxTerminalStream>();
             services.AddSingleton(terminalStream);
+            services.RemoveAll<TerminalInputSerializer>();
+            services.AddSingleton(terminalInput);
+            services.RemoveAll<TerminalActivityStateTracker>();
+            services.AddSingleton(terminalState);
         });
     }
 
@@ -226,10 +371,12 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
         throw new InvalidOperationException("Unable to find repository root for terminal API tests.");
     }
 
-    public sealed class FakeTerminalExecutor(string runtimeDirectory, string? captureOutput = null) : ITmuxCommandExecutor
+    public sealed class FakeTerminalExecutor(string runtimeDirectory, string? captureOutput = null, bool resizeUnavailable = false) : ITmuxCommandExecutor
     {
         public string SinkPath { get; } = Path.Combine(runtimeDirectory, "terminal-streams", "test-pa-personal.log");
         private string CaptureOutput { get; } = captureOutput ?? "fixture snapshot\r\n";
+        private bool ResizeUnavailable { get; } = resizeUnavailable;
+        public List<IReadOnlyList<string>> Commands { get; } = [];
         public int CaptureCount => Volatile.Read(ref captureCount);
         public int PipeStartCount => Volatile.Read(ref pipeStartCount);
         public int PipeStopCount => Volatile.Read(ref pipeStopCount);
@@ -240,6 +387,7 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
 
         public TmuxCommandResult Execute(IReadOnlyList<string> arguments)
         {
+            Commands.Add(arguments.ToArray());
             if (arguments[0] == "capture-pane")
             {
                 Interlocked.Increment(ref captureCount);
@@ -256,6 +404,11 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
                 {
                     Interlocked.Increment(ref pipeStopCount);
                 }
+            }
+
+            if (arguments[0] == "resize-pane" && ResizeUnavailable)
+            {
+                throw new TmuxUnavailableException("test tmux unavailable");
             }
 
             return new TmuxCommandResult(0, string.Empty, string.Empty);

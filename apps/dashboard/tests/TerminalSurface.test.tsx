@@ -7,8 +7,14 @@ import { TerminalSurface } from "../src/features/agents/TerminalSurface";
 const { FakeWebSocket, FakeTerminal, FakeFitAddon } = vi.hoisted(() => {
   class HoistedFakeWebSocket {
     static instances: HoistedFakeWebSocket[] = [];
+    static OPEN = 1;
+    static CLOSED = 3;
     readonly url: string;
-    readonly close = vi.fn();
+    readyState = 0;
+    readonly send = vi.fn();
+    readonly close = vi.fn(() => {
+      this.readyState = HoistedFakeWebSocket.CLOSED;
+    });
     private readonly listeners = new Map<string, Array<(event: { data?: unknown }) => void>>();
 
     constructor(url: string) {
@@ -23,6 +29,11 @@ const { FakeWebSocket, FakeTerminal, FakeFitAddon } = vi.hoisted(() => {
     }
 
     emit(type: string, event: { data?: unknown } = {}): void {
+      if (type === "open") {
+        this.readyState = HoistedFakeWebSocket.OPEN;
+      } else if (type === "close") {
+        this.readyState = HoistedFakeWebSocket.CLOSED;
+      }
       for (const listener of this.listeners.get(type) ?? []) {
         listener(event);
       }
@@ -34,10 +45,33 @@ const { FakeWebSocket, FakeTerminal, FakeFitAddon } = vi.hoisted(() => {
     readonly write = vi.fn();
     readonly open = vi.fn();
     readonly loadAddon = vi.fn();
+    readonly focus = vi.fn();
     readonly dispose = vi.fn();
+    readonly cols = 80;
+    readonly rows = 24;
+    private dataListener: ((data: string) => void) | undefined;
+    private resizeListener: ((event: { cols: number; rows: number }) => void) | undefined;
+
+    readonly onData = vi.fn((listener: (data: string) => void) => {
+      this.dataListener = listener;
+      return { dispose: vi.fn() };
+    });
+
+    readonly onResize = vi.fn((listener: (event: { cols: number; rows: number }) => void) => {
+      this.resizeListener = listener;
+      return { dispose: vi.fn() };
+    });
 
     constructor() {
       HoistedFakeTerminal.instances.push(this);
+    }
+
+    emitData(data: string): void {
+      this.dataListener?.(data);
+    }
+
+    emitResize(cols: number, rows: number): void {
+      this.resizeListener?.({ cols, rows });
     }
   }
 
@@ -77,10 +111,10 @@ describe("TerminalSurface", () => {
     const terminal = FakeTerminal.instances[0]!;
 
     expect(socket.url).toBe("ws://localhost:3000/ws/agents/personal/terminal");
-    expect(screen.getByRole("status")).toHaveTextContent("Connecting");
+    expect(screen.getByText("Connecting")).toBeInTheDocument();
 
     act(() => socket.emit("open"));
-    expect(screen.getByRole("status")).toHaveTextContent("Live stream");
+    expect(screen.getByText("Live stream")).toBeInTheDocument();
 
     send(socket, { type: "hello", protocol: "phase-0c-terminal.v1", agentId: "personal" });
     send(socket, {
@@ -91,10 +125,18 @@ describe("TerminalSurface", () => {
       hydrationBoundary: true,
     });
     send(socket, { type: "output", sequence: 1, data: "streamed\r\n" });
+    send(socket, { type: "state", state: "busy" });
 
     await waitFor(() => expect(screen.getByText("Hydrated from tmux")).toBeInTheDocument());
+    expect(screen.getByText("State: Busy")).toBeInTheDocument();
     expect(terminal.write).toHaveBeenNthCalledWith(1, "ready\r\n");
     expect(terminal.write).toHaveBeenNthCalledWith(2, "streamed\r\n");
+
+    terminal.emitData("typed input\n");
+    terminal.emitResize(120, 36);
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: "input", sequence: 1, data: "typed input\n" }));
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: "resize", columns: 120, rows: 36 }));
+    send(socket, { type: "inputAck", sequence: 1 });
 
     send(socket, { type: "output", sequence: 1, data: "duplicate\r\n" });
     expect(await screen.findByRole("alert")).toHaveTextContent("sequence moved backwards");
@@ -105,7 +147,7 @@ describe("TerminalSurface", () => {
     const firstSocket = FakeWebSocket.instances[0]!;
 
     act(() => firstSocket.emit("close"));
-    expect(screen.getByRole("status")).toHaveTextContent("Disconnected");
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
     act(() => screen.getByRole("button", { name: "Reconnect stream" }).click());
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
 

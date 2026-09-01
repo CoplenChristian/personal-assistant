@@ -62,6 +62,36 @@ public sealed class TmuxTerminalStreamTests
     }
 
     [Fact]
+    public void Literal_input_uses_literal_argument_form_and_preserves_control_sequences()
+    {
+        var executor = new FakeTmuxExecutor();
+        var manager = new TmuxSessionManager("test-pa-", executor, new NoopProcessInspector());
+        const string data = "paste with spaces\n\u001b[31mred\u001b[0m";
+
+        manager.SendLiteralInput("test-pa-personal", data);
+
+        Assert.Equal(
+            ["send-keys", "-t", "test-pa-personal:0.0", "-l", "--", data],
+            executor.Commands.Last());
+        Assert.DoesNotContain(executor.Commands.Last(), argument => argument.Contains("sh -c", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Resize_uses_bounded_typed_dimensions()
+    {
+        var executor = new FakeTmuxExecutor();
+        var manager = new TmuxSessionManager("test-pa-", executor, new NoopProcessInspector());
+
+        manager.ResizePane("test-pa-personal", 120, 36);
+
+        Assert.Equal(
+            ["resize-pane", "-t", "test-pa-personal:0.0", "-x", "120", "-y", "36"],
+            executor.Commands.Last());
+        Assert.Throws<AgentConfigurationException>(() => manager.ResizePane("test-pa-personal", 0, 36));
+        Assert.Throws<AgentConfigurationException>(() => manager.ResizePane("test-pa-personal", 120, TerminalProtocol.MaxRows + 1));
+    }
+
+    [Fact]
     public async Task Stream_publishes_data_appended_after_the_pipe_is_ready()
     {
         var runtimeDirectory = Directory.CreateTempSubdirectory("personal-assistant-terminal-").FullName;
@@ -88,6 +118,21 @@ public sealed class TmuxTerminalStreamTests
         }
     }
 
+    [Fact]
+    public async Task Async_literal_input_propagates_cancellation_to_the_tmux_boundary()
+    {
+        var executor = new CancellableTmuxExecutor();
+        var manager = new TmuxSessionManager("test-pa-", executor, new NoopProcessInspector());
+        using var cancellation = new CancellationTokenSource();
+
+        var input = manager.SendLiteralInputAsync("test-pa-personal", "cancel me", cancellation.Token);
+        await executor.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => input);
+        await executor.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
     private sealed class FakeTmuxExecutor : ITmuxCommandExecutor
     {
         public List<IReadOnlyList<string>> Commands { get; } = [];
@@ -105,5 +150,35 @@ public sealed class TmuxTerminalStreamTests
     private sealed class NoopProcessInspector : INativeProcessInspector
     {
         public ProcessObservation Inspect(int processId, string expectedExecutable) => new(true, true);
+    }
+
+    private sealed class CancellableTmuxExecutor : ITmuxCommandExecutor, ICancellableTmuxCommandExecutor
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TmuxCommandResult Execute(IReadOnlyList<string> arguments) =>
+            new(0, string.Empty, string.Empty);
+
+        public async Task<TmuxCommandResult> ExecuteAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+        {
+            if (arguments[0] == "has-session")
+            {
+                return new TmuxCommandResult(0, string.Empty, string.Empty);
+            }
+
+            Started.SetResult(true);
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                CancellationObserved.SetResult(true);
+                throw;
+            }
+
+            return new TmuxCommandResult(0, string.Empty, string.Empty);
+        }
     }
 }

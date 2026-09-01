@@ -9,6 +9,7 @@ import {
   terminalWebSocketUrl,
 } from "../../api/terminalApi";
 import type {
+  TerminalActivityState,
   TerminalConnectionState,
   TerminalErrorFrame,
 } from "../../api/terminalApi";
@@ -36,9 +37,14 @@ function terminalErrorMessage(frame: TerminalErrorFrame): string {
   return frame.detail ?? `The terminal stream reported ${frame.code}.`;
 }
 
+function activityLabel(state: TerminalActivityState): string {
+  return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
 export function TerminalSurface({ scrollbackLines }: TerminalSurfaceProps) {
   const terminalElement = useRef<HTMLDivElement | null>(null);
   const [connectionState, setConnectionState] = useState<TerminalConnectionState>("connecting");
+  const [activityState, setActivityState] = useState<TerminalActivityState>("idle");
   const [hydrated, setHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionAttempt, setConnectionAttempt] = useState(0);
@@ -50,9 +56,10 @@ export function TerminalSurface({ scrollbackLines }: TerminalSurfaceProps) {
 
     let cancelled = false;
     let lastSequence = 0;
+    let nextInputSequence = 1;
     const terminal = new Terminal({
       scrollback: scrollbackLines,
-      disableStdin: true,
+      disableStdin: false,
       cursorBlink: false,
       convertEol: false,
       fontFamily: "SF Mono, JetBrains Mono, Courier New, monospace",
@@ -68,15 +75,52 @@ export function TerminalSurface({ scrollbackLines }: TerminalSurfaceProps) {
     terminal.loadAddon(fitAddon);
     terminal.open(terminalElement.current);
     fitAddon.fit();
+    terminal.focus();
 
     const socket = new WebSocket(terminalWebSocketUrl());
     setConnectionState(connectionAttempt === 0 ? "connecting" : "reconnecting");
     setHydrated(false);
     setError(null);
 
+    const sendFrame = (frame: object): boolean => {
+      if (cancelled) {
+        return false;
+      }
+
+      if (socket.readyState !== WebSocket.OPEN) {
+        setConnectionState("error");
+        setError("The terminal is not connected; input was not sent.");
+        return false;
+      }
+
+      try {
+        socket.send(JSON.stringify(frame));
+        return true;
+      } catch {
+        setConnectionState("error");
+        setError("The terminal input could not be sent.");
+        return false;
+      }
+    };
+
+    const inputSubscription = terminal.onData((data) => {
+      if (sendFrame({ type: "input", sequence: nextInputSequence, data })) {
+        nextInputSequence += 1;
+      }
+    });
+    const resizeSubscription = terminal.onResize(({ cols, rows }) => {
+      sendFrame({ type: "resize", columns: cols, rows });
+    });
+    const handleWindowResize = () => fitAddon.fit();
+    window.addEventListener("resize", handleWindowResize);
+
     socket.addEventListener("open", () => {
       if (!cancelled) {
         setConnectionState("connected");
+        fitAddon.fit();
+        if (terminal.cols > 0 && terminal.rows > 0) {
+          sendFrame({ type: "resize", columns: terminal.cols, rows: terminal.rows });
+        }
       }
     });
 
@@ -116,8 +160,16 @@ export function TerminalSurface({ scrollbackLines }: TerminalSurfaceProps) {
           return;
         }
 
+        if (frame.type === "state") {
+          setActivityState(frame.state);
+          return;
+        }
+
+        if (frame.type === "inputAck" || frame.type === "pong") {
+          return;
+        }
+
         if (frame.type === "error") {
-          setConnectionState("error");
           setError(terminalErrorMessage(frame));
         }
       } catch (frameError) {
@@ -141,6 +193,9 @@ export function TerminalSurface({ scrollbackLines }: TerminalSurfaceProps) {
 
     return () => {
       cancelled = true;
+      inputSubscription.dispose();
+      resizeSubscription.dispose();
+      window.removeEventListener("resize", handleWindowResize);
       socket.close(1000, "terminal observer unmounted");
       terminal.dispose();
     };
@@ -162,7 +217,7 @@ export function TerminalSurface({ scrollbackLines }: TerminalSurfaceProps) {
       </header>
       <div className="terminal-workspace__meta">
         <span>{hydrated ? "Hydrated from tmux" : "Waiting for hydration"}</span>
-        <span className="terminal-workspace__state">Read-only observer</span>
+        <span className="terminal-workspace__state" role="status" aria-live="polite">State: {activityLabel(activityState)}</span>
         <span>{scrollbackLines.toLocaleString()} lines</span>
       </div>
       <div className="terminal-surface" aria-label="Personal Claude terminal">

@@ -24,6 +24,8 @@ describe("terminalApi", () => {
     expect(() => parseTerminalFrame({ type: "snapshot", sequence: 0, data: "" }))
       .toThrow("snapshot is invalid");
     expect(() => parseTerminalFrame("not-json")).toThrow("invalid JSON");
+    expect(() => parseTerminalFrame({ type: "state", state: "working" })).toThrow("state is invalid");
+    expect(() => parseTerminalFrame({ type: "inputAck", sequence: -1 })).toThrow("valid sequence");
   });
 
   it("uses the page host and upgrades the browser protocol", () => {

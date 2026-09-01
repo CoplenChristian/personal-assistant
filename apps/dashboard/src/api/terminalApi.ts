@@ -2,6 +2,7 @@ export const TERMINAL_PROTOCOL = "phase-0c-terminal.v1";
 export const TERMINAL_SOCKET_PATH = "/ws/agents/personal/terminal";
 
 export type TerminalConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
+export type TerminalActivityState = "idle" | "busy" | "waiting" | "error";
 
 export interface TerminalHelloFrame {
   type: "hello";
@@ -25,7 +26,12 @@ export interface TerminalOutputFrame {
 
 export interface TerminalStateFrame {
   type: "state";
-  state: string;
+  state: TerminalActivityState;
+}
+
+export interface TerminalInputAcknowledgementFrame {
+  type: "inputAck";
+  sequence: number;
 }
 
 export interface TerminalPongFrame {
@@ -44,6 +50,7 @@ export type TerminalServerFrame =
   | TerminalSnapshotFrame
   | TerminalOutputFrame
   | TerminalStateFrame
+  | TerminalInputAcknowledgementFrame
   | TerminalPongFrame
   | TerminalErrorFrame;
 
@@ -81,9 +88,11 @@ export function parseTerminalFrame(payload: unknown): TerminalServerFrame {
     case "output":
       return requireOutput(value);
     case "state":
-      return requireStrings(value, ["state"]) as TerminalStateFrame;
+      return requireState(value);
+    case "inputAck":
+      return requireSequence(value);
     case "pong":
-      return requireNumber(value, "sequence") as TerminalPongFrame;
+      return requireSequence(value);
     case "error":
       return requireStrings(value, ["code"]) as TerminalErrorFrame;
     default:
@@ -92,9 +101,9 @@ export function parseTerminalFrame(payload: unknown): TerminalServerFrame {
 }
 
 function requireSnapshot(value: Record<string, unknown>): TerminalSnapshotFrame {
-  if (typeof value.sequence !== "number"
+  if (!isNonNegativeInteger(value.sequence)
     || typeof value.data !== "string"
-    || typeof value.scrollbackLines !== "number"
+    || !isNonNegativeInteger(value.scrollbackLines)
     || value.hydrationBoundary !== true) {
     throw new TerminalProtocolError("The terminal snapshot is invalid.");
   }
@@ -102,7 +111,7 @@ function requireSnapshot(value: Record<string, unknown>): TerminalSnapshotFrame 
 }
 
 function requireOutput(value: Record<string, unknown>): TerminalOutputFrame {
-  if (typeof value.sequence !== "number" || typeof value.data !== "string") {
+  if (!isNonNegativeInteger(value.sequence) || typeof value.data !== "string") {
     throw new TerminalProtocolError("The terminal output frame is invalid.");
   }
   return value as unknown as TerminalOutputFrame;
@@ -115,11 +124,22 @@ function requireStrings(value: Record<string, unknown>, properties: string[]): T
   return value as unknown as TerminalServerFrame;
 }
 
-function requireNumber(value: Record<string, unknown>, property: string): TerminalPongFrame {
-  if (typeof value[property] !== "number" || !Number.isInteger(value[property])) {
+function requireState(value: Record<string, unknown>): TerminalStateFrame {
+  if (value.state !== "idle" && value.state !== "busy" && value.state !== "waiting" && value.state !== "error") {
+    throw new TerminalProtocolError("The terminal state is invalid.");
+  }
+  return value as unknown as TerminalStateFrame;
+}
+
+function requireSequence(value: Record<string, unknown>): TerminalInputAcknowledgementFrame | TerminalPongFrame {
+  if (!isNonNegativeInteger(value.sequence)) {
     throw new TerminalProtocolError("The terminal frame is missing a valid sequence.");
   }
-  return value as unknown as TerminalPongFrame;
+  return value as unknown as TerminalInputAcknowledgementFrame | TerminalPongFrame;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

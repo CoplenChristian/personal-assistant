@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.ComponentModel;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using PersonalAssistant.Harness.Agents;
 
@@ -11,6 +12,11 @@ public sealed record TmuxCommandResult(int ExitCode, string StandardOutput, stri
 public interface ITmuxCommandExecutor
 {
     TmuxCommandResult Execute(IReadOnlyList<string> arguments);
+}
+
+public interface ICancellableTmuxCommandExecutor
+{
+    Task<TmuxCommandResult> ExecuteAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken);
 }
 
 public interface INativeProcessInspector
@@ -29,7 +35,7 @@ public sealed record TmuxHealth(
 
 public sealed record TmuxPaneSnapshot(string Data, int ScrollbackLines);
 
-public sealed class ProcessTmuxCommandExecutor(string executable = "tmux") : ITmuxCommandExecutor
+public sealed class ProcessTmuxCommandExecutor(string executable = "tmux") : ITmuxCommandExecutor, ICancellableTmuxCommandExecutor
 {
     public TmuxCommandResult Execute(IReadOnlyList<string> arguments)
     {
@@ -58,6 +64,72 @@ public sealed class ProcessTmuxCommandExecutor(string executable = "tmux") : ITm
         catch (Win32Exception exception)
         {
             throw new TmuxUnavailableException($"The tmux executable is unavailable: {exception.Message}");
+        }
+    }
+
+    public async Task<TmuxCommandResult> ExecuteAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        try
+        {
+            using var process = Process.Start(startInfo)
+                ?? throw new TmuxUnavailableException("Unable to start the tmux executable.");
+            var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken);
+                await Task.WhenAll(standardOutput, standardError);
+            }
+            catch (OperationCanceledException)
+            {
+                TryKill(process);
+                await WaitForExitAfterCancellationAsync(process);
+                throw;
+            }
+
+            return new TmuxCommandResult(process.ExitCode, await standardOutput, await standardError);
+        }
+        catch (Win32Exception exception)
+        {
+            throw new TmuxUnavailableException($"The tmux executable is unavailable: {exception.Message}");
+        }
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private static async Task WaitForExitAfterCancellationAsync(Process process)
+    {
+        try
+        {
+            await process.WaitForExitAsync();
+        }
+        catch (InvalidOperationException)
+        {
         }
     }
 }
@@ -269,6 +341,76 @@ public sealed class TmuxSessionManager
         EnsureSuccess(result, "Unable to stop the tmux output pipe.");
     }
 
+    public void SendLiteralInput(string name, string data)
+    {
+        ValidateSessionName(name);
+        ValidateLiteralInput(data);
+        if (!HasSession(name))
+        {
+            throw new TmuxOperationException("agent_session_missing", "The tmux session does not exist.");
+        }
+
+        var result = executor.Execute(["send-keys", "-t", $"{name}:0.0", "-l", "--", data]);
+        EnsureSuccess(result, "Unable to deliver literal input to the tmux pane.");
+    }
+
+    public async Task SendLiteralInputAsync(string name, string data, CancellationToken cancellationToken = default)
+    {
+        ValidateSessionName(name);
+        ValidateLiteralInput(data);
+        var session = await ExecuteAsync(["has-session", "-t", name], cancellationToken);
+        if (session.ExitCode != 0)
+        {
+            throw new TmuxOperationException("agent_session_missing", "The tmux session does not exist.");
+        }
+
+        var result = await ExecuteAsync(["send-keys", "-t", $"{name}:0.0", "-l", "--", data], cancellationToken);
+        EnsureSuccess(result, "Unable to deliver literal input to the tmux pane.");
+    }
+
+    public void ResizePane(string name, int columns, int rows)
+    {
+        ValidateSessionName(name);
+        ValidateDimensions(columns, rows);
+        if (!HasSession(name))
+        {
+            throw new TmuxOperationException("agent_session_missing", "The tmux session does not exist.");
+        }
+
+        var result = executor.Execute([
+            "resize-pane",
+            "-t",
+            $"{name}:0.0",
+            "-x",
+            columns.ToString(CultureInfo.InvariantCulture),
+            "-y",
+            rows.ToString(CultureInfo.InvariantCulture)
+        ]);
+        EnsureSuccess(result, "Unable to resize the tmux pane.");
+    }
+
+    public async Task ResizePaneAsync(string name, int columns, int rows, CancellationToken cancellationToken = default)
+    {
+        ValidateSessionName(name);
+        ValidateDimensions(columns, rows);
+        var session = await ExecuteAsync(["has-session", "-t", name], cancellationToken);
+        if (session.ExitCode != 0)
+        {
+            throw new TmuxOperationException("agent_session_missing", "The tmux session does not exist.");
+        }
+
+        var result = await ExecuteAsync([
+            "resize-pane",
+            "-t",
+            $"{name}:0.0",
+            "-x",
+            columns.ToString(CultureInfo.InvariantCulture),
+            "-y",
+            rows.ToString(CultureInfo.InvariantCulture)
+        ], cancellationToken);
+        EnsureSuccess(result, "Unable to resize the tmux pane.");
+    }
+
     public void StopSession(string name)
     {
         ValidateSessionName(name);
@@ -383,6 +525,37 @@ public sealed class TmuxSessionManager
         }
 
         return Path.GetFullPath(sinkPath);
+    }
+
+    private static void ValidateLiteralInput(string data)
+    {
+        if (string.IsNullOrEmpty(data) || data.Contains('\0'))
+        {
+            throw new AgentConfigurationException("Literal terminal input must be non-empty and must not contain a NUL character.");
+        }
+
+        if (Encoding.UTF8.GetByteCount(data) > TerminalProtocol.MaxPayloadBytes)
+        {
+            throw new AgentConfigurationException("Literal terminal input exceeds the supported payload limit.");
+        }
+    }
+
+    private static void ValidateDimensions(int columns, int rows)
+    {
+        if (columns is < 1 or > TerminalProtocol.MaxColumns || rows is < 1 or > TerminalProtocol.MaxRows)
+        {
+            throw new AgentConfigurationException("Terminal dimensions are outside the supported bounds.");
+        }
+    }
+
+    private async Task<TmuxCommandResult> ExecuteAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        if (executor is ICancellableTmuxCommandExecutor cancellable)
+        {
+            return await cancellable.ExecuteAsync(arguments, cancellationToken);
+        }
+
+        return await Task.Run(() => executor.Execute(arguments), cancellationToken);
     }
 
     private void ValidateSessionName(string name)

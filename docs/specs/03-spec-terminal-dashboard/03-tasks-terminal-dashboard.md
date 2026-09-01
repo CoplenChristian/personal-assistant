@@ -1,6 +1,6 @@
 # 03-tasks-terminal-dashboard.md
 
-Status: T1 complete; T2-T4 pending
+Status: T1-T2 complete; T3-T4 pending
 Spec: [03-spec-terminal-dashboard.md](03-spec-terminal-dashboard.md)
 Planning mode: planning audit passed; implementation may begin through the SDD workflow.
 
@@ -135,7 +135,7 @@ scheduling, skills, integrations, memory search, or multi-user access.
   Vitest tests with mocked WebSocket/xterm prove snapshot-before-output and
   Strict Mode cleanup; hosted browser screenshot proves the visible workspace.
 
-### [ ] 2.0 Serialized input and explicit terminal state
+### [x] 2.0 Serialized input and explicit terminal state
 
 #### 2.0 Proof Artifact(s)
 
@@ -156,26 +156,26 @@ scheduling, skills, integrations, memory search, or multi-user access.
 
 #### 2.0 Tasks
 
-- [ ] 2.1 Implement `TerminalInputSerializer` as a per-logical-agent FIFO with
+- [x] 2.1 Implement `TerminalInputSerializer` as a per-logical-agent FIFO with
   one in-flight operation, bounded queue/frame limits, cancellation, stable
   rejection codes, and input acknowledgements. Test artifact: interleaving,
   overflow, cancellation, and failure-injection tests prove ordering and no
   silent drops.
-- [ ] 2.2 Add typed literal-input and resize operations to the tmux boundary;
+- [x] 2.2 Add typed literal-input and resize operations to the tmux boundary;
   use argument arrays and validated positive column/row bounds, and keep input
   separate from model/API prompt abstractions. Test artifact: fake executor
   tests prove `send-keys -l`/resize argument shape, control-sequence handling,
   and absence of `sh -c` or model-generated shell text.
-- [ ] 2.3 Add server frame validation and deterministic terminal state tracking:
+- [x] 2.3 Add server frame validation and deterministic terminal state tracking:
   healthy-idle default, busy during queued/in-flight/recent input activity,
   explicit waiting event, error on stream/input/runtime failure, and state
   frames to observers. Test artifact: state-transition and WebSocket tests
   cover all four states and invalid frame/session cases.
-- [ ] 2.4 Connect xterm `onData`, resize/fitting, acknowledgement, reconnect,
+- [x] 2.4 Connect xterm `onData`, resize/fitting, acknowledgement, reconnect,
   close cleanup, and accessible state announcements to the protocol. Test
   artifact: React tests prove FIFO-facing client behavior, visible labels,
   responsive controls, no stop on unmount, and Strict Mode setup/cleanup.
-- [ ] 2.5 Exercise keyboard, resize, reconnect, error, and browser-close paths
+- [x] 2.5 Exercise keyboard, resize, reconnect, error, and browser-close paths
   against the hosted dashboard using a deterministic fake session fixture.
   Proof artifact: browser trace/screenshot and server log show only observer
   disconnect on browser close, with no lifecycle stop request.

@@ -20,7 +20,10 @@ var harnessRuntime = HarnessRuntime.Create(repositoryRoot, bootstrapEnvironment,
 builder.Services.AddSingleton<HarnessRuntime>(_ => harnessRuntime);
 builder.Services.AddSingleton<SettingsService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Settings);
 builder.Services.AddSingleton<IAgentSessionService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Agents);
+builder.Services.AddSingleton<TmuxSessionManager>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Tmux);
 builder.Services.AddSingleton<TmuxTerminalStream>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalStream);
+builder.Services.AddSingleton<TerminalInputSerializer>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalInput);
+builder.Services.AddSingleton<TerminalActivityStateTracker>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalState);
 builder.Services.AddProblemDetails();
 builder.WebHost.UseUrls($"http://{harnessRuntime.Bootstrap.ServerHost}:{harnessRuntime.Bootstrap.ServerPort}");
 

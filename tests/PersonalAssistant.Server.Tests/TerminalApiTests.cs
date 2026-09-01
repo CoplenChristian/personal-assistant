@@ -32,29 +32,30 @@ public sealed class TerminalApiTests
     }
 
     [Fact]
-    public async Task Websocket_sends_hello_snapshot_then_live_output()
+    public async Task Websocket_sends_hello_screen_then_a_coalesced_screen_update()
     {
         using var factory = new TerminalApiFactory();
         var socketClient = factory.Server.CreateWebSocketClient();
         using var socket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
 
         using var hello = await ReceiveJsonAsync(socket);
-        using var snapshot = await ReceiveJsonAsync(socket);
+        using var screen = await ReceiveJsonAsync(socket);
         Assert.Equal("hello", hello.RootElement.GetProperty("type").GetString());
-        Assert.Equal("phase-0c-terminal.v1", hello.RootElement.GetProperty("protocol").GetString());
+        Assert.Equal("phase-0c-terminal.standardized.v1", hello.RootElement.GetProperty("protocol").GetString());
         Assert.Equal("personal", hello.RootElement.GetProperty("agentId").GetString());
-        Assert.Equal("snapshot", snapshot.RootElement.GetProperty("type").GetString());
-        Assert.True(snapshot.RootElement.GetProperty("hydrationBoundary").GetBoolean());
-        Assert.Equal("fixture snapshot\r\n", snapshot.RootElement.GetProperty("data").GetString());
+        Assert.Equal("screen", screen.RootElement.GetProperty("type").GetString());
+        Assert.True(screen.RootElement.GetProperty("hydrationBoundary").GetBoolean());
+        Assert.Equal("fixture snapshot", screen.RootElement.GetProperty("data").GetString());
         using var initialState = await ReceiveJsonAsync(socket);
         Assert.Equal("state", initialState.RootElement.GetProperty("type").GetString());
         Assert.Equal("idle", initialState.RootElement.GetProperty("state").GetString());
 
         File.AppendAllText(factory.Executor.SinkPath, "fixture output\r\n");
-        using var output = await ReceiveJsonAsync(socket);
-        Assert.Equal("output", output.RootElement.GetProperty("type").GetString());
-        Assert.Equal(1, output.RootElement.GetProperty("sequence").GetInt64());
-        Assert.Equal("fixture output\r\n", output.RootElement.GetProperty("data").GetString());
+        using var update = await ReceiveJsonAsync(socket);
+        Assert.Equal("screen", update.RootElement.GetProperty("type").GetString());
+        Assert.Equal(1, update.RootElement.GetProperty("sequence").GetInt64());
+        Assert.False(update.RootElement.GetProperty("hydrationBoundary").GetBoolean());
+        Assert.Equal("fixture snapshot", update.RootElement.GetProperty("data").GetString());
 
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
     }
@@ -67,10 +68,11 @@ public sealed class TerminalApiTests
         using (var firstSocket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None))
         {
             using var firstHello = await ReceiveJsonAsync(firstSocket);
-            using var firstSnapshot = await ReceiveJsonAsync(firstSocket);
+            using var firstScreen = await ReceiveJsonAsync(firstSocket);
             using var firstState = await ReceiveJsonAsync(firstSocket);
             Assert.Equal("hello", firstHello.RootElement.GetProperty("type").GetString());
-            Assert.Equal(0, firstSnapshot.RootElement.GetProperty("sequence").GetInt64());
+            Assert.Equal("screen", firstScreen.RootElement.GetProperty("type").GetString());
+            Assert.Equal(0, firstScreen.RootElement.GetProperty("sequence").GetInt64());
             Assert.Equal("idle", firstState.RootElement.GetProperty("state").GetString());
             await firstSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "reconnect", CancellationToken.None);
         }
@@ -78,12 +80,12 @@ public sealed class TerminalApiTests
         await WaitForAsync(() => factory.Executor.PipeStopCount == 1);
         using var secondSocket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
         using var secondHello = await ReceiveJsonAsync(secondSocket);
-        using var secondSnapshot = await ReceiveJsonAsync(secondSocket);
+        using var secondScreen = await ReceiveJsonAsync(secondSocket);
         using var secondState = await ReceiveJsonAsync(secondSocket);
 
         Assert.Equal("hello", secondHello.RootElement.GetProperty("type").GetString());
-        Assert.Equal("snapshot", secondSnapshot.RootElement.GetProperty("type").GetString());
-        Assert.Equal(0, secondSnapshot.RootElement.GetProperty("sequence").GetInt64());
+        Assert.Equal("screen", secondScreen.RootElement.GetProperty("type").GetString());
+        Assert.Equal(0, secondScreen.RootElement.GetProperty("sequence").GetInt64());
         Assert.Equal("idle", secondState.RootElement.GetProperty("state").GetString());
         Assert.Equal(2, factory.Executor.CaptureCount);
         Assert.Equal(2, factory.Executor.PipeStartCount);
@@ -118,19 +120,19 @@ public sealed class TerminalApiTests
     }
 
     [Fact]
-    public async Task Websocket_bounds_an_oversized_snapshot_frame()
+    public async Task Websocket_bounds_an_oversized_screen_frame()
     {
         using var factory = new TerminalApiFactory(captureOutput: new string('x', TerminalProtocol.MaxPayloadBytes * 2));
         var socketClient = factory.Server.CreateWebSocketClient();
         using var socket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
 
         using var hello = await ReceiveJsonAsync(socket);
-        using var snapshot = await ReceiveJsonAsync(socket);
-        var serializedSnapshotBytes = Encoding.UTF8.GetByteCount(snapshot.RootElement.GetRawText());
+        using var screen = await ReceiveJsonAsync(socket);
+        var serializedScreenBytes = Encoding.UTF8.GetByteCount(screen.RootElement.GetRawText());
 
-        Assert.Equal("snapshot", snapshot.RootElement.GetProperty("type").GetString());
-        Assert.True(serializedSnapshotBytes <= TerminalProtocol.MaxPayloadBytes);
-        Assert.True(snapshot.RootElement.GetProperty("data").GetString()!.Length < TerminalProtocol.MaxPayloadBytes * 2);
+        Assert.Equal("screen", screen.RootElement.GetProperty("type").GetString());
+        Assert.True(serializedScreenBytes <= TerminalProtocol.MaxPayloadBytes);
+        Assert.True(screen.RootElement.GetProperty("data").GetString()!.Length < TerminalProtocol.MaxPayloadBytes * 2);
 
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
     }
@@ -250,7 +252,7 @@ public sealed class TerminalApiTests
         using var snapshot = await ReceiveJsonAsync(socket);
         using var state = await ReceiveJsonAsync(socket);
         Assert.Equal("hello", hello.RootElement.GetProperty("type").GetString());
-        Assert.Equal("snapshot", snapshot.RootElement.GetProperty("type").GetString());
+        Assert.Equal("screen", snapshot.RootElement.GetProperty("type").GetString());
         Assert.Equal("idle", state.RootElement.GetProperty("state").GetString());
     }
 

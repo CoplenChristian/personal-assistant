@@ -6,23 +6,24 @@ import {
 } from "../src/api/terminalApi";
 
 describe("terminalApi", () => {
-  it("parses the versioned snapshot and output frames", () => {
+  it("parses the versioned canonical screen frames", () => {
     expect(parseTerminalFrame(JSON.stringify({
-      type: "snapshot",
+      type: "screen",
       sequence: 0,
-      data: "hello\r\n",
-      scrollbackLines: 5000,
+      data: "hello",
+      columns: 5,
+      rows: 1,
       hydrationBoundary: true,
-    }))).toMatchObject({ type: "snapshot", sequence: 0, hydrationBoundary: true });
+    }))).toMatchObject({ type: "screen", sequence: 0, hydrationBoundary: true });
 
-    expect(parseTerminalFrame({ type: "output", sequence: 1, data: "next\r\n" }))
-      .toMatchObject({ type: "output", sequence: 1, data: "next\r\n" });
+    expect(parseTerminalFrame({ type: "screen", sequence: 1, data: "next", columns: 4, rows: 1, hydrationBoundary: false }))
+      .toMatchObject({ type: "screen", sequence: 1, data: "next" });
   });
 
   it("rejects unsupported or incomplete frames", () => {
     expect(() => parseTerminalFrame({ type: "unknown" })).toThrow("unsupported frame type");
-    expect(() => parseTerminalFrame({ type: "snapshot", sequence: 0, data: "" }))
-      .toThrow("snapshot is invalid");
+    expect(() => parseTerminalFrame({ type: "screen", sequence: 0, data: "" }))
+      .toThrow("screen frame is invalid");
     expect(() => parseTerminalFrame("not-json")).toThrow("invalid JSON");
     expect(() => parseTerminalFrame({ type: "state", state: "working" })).toThrow("state is invalid");
     expect(() => parseTerminalFrame({ type: "inputAck", sequence: -1 })).toThrow("valid sequence");

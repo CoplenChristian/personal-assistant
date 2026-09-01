@@ -5,7 +5,7 @@ namespace PersonalAssistant.Harness.Runtime;
 
 public static class TerminalProtocol
 {
-    public const string ContractVersion = "phase-0c-terminal.v1";
+    public const string ContractVersion = "phase-0c-terminal.standardized.v1";
     public const int MaxPayloadBytes = 64 * 1024;
     public const int MaxColumns = 500;
     public const int MaxRows = 250;
@@ -36,15 +36,14 @@ public sealed record TerminalHelloFrame(string Protocol, string AgentId)
     public string Type => "hello";
 }
 
-public sealed record TerminalSnapshotFrame(long Sequence, string Data, int ScrollbackLines)
+public sealed record TerminalScreenFrame(
+    long Sequence,
+    string Data,
+    int Columns,
+    int Rows,
+    bool HydrationBoundary)
 {
-    public string Type => "snapshot";
-    public bool HydrationBoundary => true;
-}
-
-public sealed record TerminalOutputFrame(long Sequence, string Data)
-{
-    public string Type => "output";
+    public string Type => "screen";
 }
 
 public sealed record TerminalStateFrame(string State)

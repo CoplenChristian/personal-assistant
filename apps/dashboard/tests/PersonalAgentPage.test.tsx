@@ -4,9 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PersonalAgentPage } from "../src/features/agents/PersonalAgentPage";
 import type { AgentStatus } from "../src/api/agentsApi";
 
-vi.mock("../src/features/agents/TerminalSurface", () => ({
-  TerminalSurface: ({ scrollbackLines }: { scrollbackLines: number }) => (
-    <div role="region" aria-label="Terminal view">Terminal surface · {scrollbackLines} lines</div>
+vi.mock("../src/features/agents/StandardizedTerminalSurface", () => ({
+  StandardizedTerminalSurface: ({ scrollbackLines }: { scrollbackLines: number }) => (
+    <div role="region" aria-label="Standardized terminal">Standardized terminal · {scrollbackLines} lines</div>
   ),
 }));
 
@@ -53,7 +53,7 @@ describe("PersonalAgentPage", () => {
 
     render(<PersonalAgentPage />);
 
-    expect(await screen.findByRole("region", { name: "Terminal view" })).toHaveTextContent("7500 lines");
+    expect(await screen.findByRole("region", { name: "Standardized terminal" })).toHaveTextContent("7500 lines");
     expect(screen.getByRole("heading", { name: /the native session/i })).toBeInTheDocument();
   });
 

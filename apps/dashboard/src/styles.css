@@ -457,46 +457,76 @@ a:focus-visible {
 .terminal-status--amber { color: var(--amber); }
 .terminal-status--red { color: var(--red); }
 
-.terminal-surface {
-  position: relative;
-  background: #070c0d;
-}
-
-.terminal-surface__viewport {
-  height: min(68vh, 640px);
-  min-height: 360px;
-  padding: 18px;
-}
-
-.terminal-surface__viewport .xterm {
-  height: 100%;
-}
-
-.terminal-surface__viewport .xterm-viewport {
-  background: #070c0d !important;
-}
-
-.terminal-surface__message {
-  position: absolute;
-  inset: 24px;
-  display: grid;
-  align-content: center;
-  justify-items: start;
-  gap: 13px;
-  padding: 26px;
-  border: 1px solid rgba(239, 183, 101, 0.25);
-  background: rgba(7, 12, 13, 0.9);
-}
-
-.terminal-surface__message strong {
-  max-width: 390px;
-  color: var(--cream);
-  font: 400 24px/1.1 var(--display);
-}
-
 .terminal-workspace__error {
   margin: 0;
   padding: 12px 22px;
+  border-top: 1px solid rgba(239, 142, 121, 0.28);
+  color: var(--red);
+  background: rgba(239, 142, 121, 0.07);
+  font-size: 12px;
+}
+
+.standardized-terminal__screen {
+  height: min(68vh, 640px);
+  min-height: 360px;
+  overflow: auto;
+  margin: 0;
+  padding: 20px 22px;
+  border-top: 1px solid var(--line);
+  color: #d9e4dc;
+  background: #070c0d;
+  font: 13px/1.45 var(--mono);
+  tab-size: 4;
+  white-space: pre;
+}
+
+.standardized-terminal__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  align-items: end;
+  padding: 18px 22px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+
+.standardized-terminal__input-label {
+  grid-column: 1 / -1;
+  color: var(--faint);
+  font: 600 10px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.standardized-terminal__controls textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 50px;
+  padding: 11px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--cream);
+  outline: 0;
+  background: var(--ink-soft);
+  font: 13px/1.45 var(--mono);
+}
+
+.standardized-terminal__controls textarea:focus {
+  border-color: var(--amber);
+}
+
+.standardized-terminal__delivery {
+  grid-column: 1 / -1;
+  color: var(--faint);
+  font: 10px var(--mono);
+}
+
+.standardized-terminal__reconnect {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 22px;
   border-top: 1px solid rgba(239, 142, 121, 0.28);
   color: var(--red);
   background: rgba(239, 142, 121, 0.07);
@@ -1488,14 +1518,40 @@ a:focus-visible {
     gap: 8px;
   }
 
-  .terminal-surface__viewport {
+  .standardized-terminal__screen {
     min-height: 290px;
     height: 58vh;
-    padding: 10px;
+    padding: 14px;
   }
 
-  .terminal-surface__message {
-    inset: 14px;
-    padding: 18px;
+  .standardized-terminal__controls {
+    display: block;
+    padding: 14px;
   }
+
+  .standardized-terminal__controls textarea,
+  .standardized-terminal__controls .button {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .standardized-terminal__input-label {
+    display: block;
+  }
+
+  .standardized-terminal__delivery {
+    display: block;
+    margin-top: 12px;
+  }
+
+  .standardized-terminal__reconnect {
+    display: block;
+  }
+
+  .standardized-terminal__reconnect .button {
+    width: 100%;
+    margin-top: 12px;
+  }
+
 }

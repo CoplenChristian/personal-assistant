@@ -77,12 +77,20 @@ public static class TerminalEndpoints
         try
         {
             var snapshot = terminalStream.Capture(status.Session.TmuxSessionName, scrollbackLines);
+            var screen = TerminalScreenNormalizer.Normalize(snapshot);
             await SendJsonAsync(socket, new TerminalHelloFrame(TerminalProtocol.ContractVersion, status.Definition.Id), sendLock, cancellation.Token);
-            await SendJsonAsync(socket, CreateBoundedSnapshotFrame(snapshot), sendLock, cancellation.Token);
+            await SendJsonAsync(socket, new TerminalScreenFrame(0, screen.Data, screen.Columns, screen.Rows, HydrationBoundary: true), sendLock, cancellation.Token);
             var initialState = await stateSubscription.Reader.ReadAsync(cancellation.Token);
             await SendJsonAsync(socket, new TerminalStateFrame(initialState.ToWireValue()), sendLock, cancellation.Token);
 
-            var sendTask = SendOutputAsync(socket, lease.Output, sendLock, cancellation.Token);
+            var sendTask = SendScreenUpdatesAsync(
+                socket,
+                lease.Output,
+                terminalStream,
+                status.Session.TmuxSessionName,
+                scrollbackLines,
+                sendLock,
+                cancellation.Token);
             var stateTask = SendStateAsync(socket, stateSubscription, sendLock, cancellation.Token);
             var receiveTask = ReceiveClientFramesAsync(
                 socket,
@@ -142,22 +150,46 @@ public static class TerminalEndpoints
         }
     }
 
-    private static async Task SendOutputAsync(
+    private static async Task SendScreenUpdatesAsync(
         WebSocket socket,
         TerminalOutputSubscription subscription,
+        TmuxTerminalStream terminalStream,
+        string sessionName,
+        int scrollbackLines,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken)
     {
+        var sequence = 0L;
         try
         {
             await foreach (var message in subscription.Reader.ReadAllAsync(cancellationToken))
             {
-                await SendJsonAsync(socket, new TerminalOutputFrame(message.Sequence, message.Data), sendLock, cancellationToken);
+                _ = message;
+                await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
+                while (subscription.Reader.TryRead(out _))
+                {
+                }
+
+                var snapshot = terminalStream.Capture(sessionName, scrollbackLines);
+                var screen = TerminalScreenNormalizer.Normalize(snapshot);
+                await SendJsonAsync(
+                    socket,
+                    new TerminalScreenFrame(++sequence, screen.Data, screen.Columns, screen.Rows, HydrationBoundary: false),
+                    sendLock,
+                    cancellationToken);
             }
         }
         catch (TerminalProtocolException exception)
         {
             throw new TerminalStreamException(exception.Code, exception.Message);
+        }
+        catch (AgentLifecycleException exception)
+        {
+            throw new TerminalStreamException(exception.Code, exception.Message);
+        }
+        catch (TmuxUnavailableException exception)
+        {
+            throw new TerminalStreamException("terminal_screen_unavailable", exception.Message);
         }
     }
 
@@ -418,46 +450,6 @@ public static class TerminalEndpoints
             sendLock.Release();
         }
     }
-
-    private static TerminalSnapshotFrame CreateBoundedSnapshotFrame(TmuxPaneSnapshot snapshot)
-    {
-        if (SerializedSnapshotBytes(snapshot.Data, snapshot.ScrollbackLines) <= TerminalProtocol.MaxPayloadBytes)
-        {
-            return new TerminalSnapshotFrame(0, snapshot.Data, snapshot.ScrollbackLines);
-        }
-
-        var encoded = Encoding.UTF8.GetBytes(snapshot.Data);
-        var start = Math.Max(0, encoded.Length - TerminalProtocol.MaxPayloadBytes);
-        while (start < encoded.Length)
-        {
-            while (start < encoded.Length && (encoded[start] & 0xC0) == 0x80)
-            {
-                start++;
-            }
-
-            var data = Encoding.UTF8.GetString(encoded, start, encoded.Length - start);
-            var firstLineBreak = data.IndexOf('\n');
-            if (firstLineBreak >= 0 && firstLineBreak < data.Length - 1)
-            {
-                data = data[(firstLineBreak + 1)..];
-            }
-
-            var lineCount = data.Count(character => character == '\n');
-            var retainedLines = Math.Clamp(lineCount == 0 && data.Length > 0 ? 1 : lineCount, 0, snapshot.ScrollbackLines);
-            if (SerializedSnapshotBytes(data, retainedLines) <= TerminalProtocol.MaxPayloadBytes)
-            {
-                return new TerminalSnapshotFrame(0, data, retainedLines);
-            }
-
-            var remaining = encoded.Length - start;
-            start += Math.Max(1, remaining / 10);
-        }
-
-        return new TerminalSnapshotFrame(0, string.Empty, 0);
-    }
-
-    private static int SerializedSnapshotBytes(string data, int scrollbackLines) =>
-        Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(new TerminalSnapshotFrame(0, data, scrollbackLines), JsonOptions));
 
     private static TerminalStreamException? GetTerminalStreamFailure(Task task) =>
         task.IsFaulted ? task.Exception?.GetBaseException() as TerminalStreamException : null;

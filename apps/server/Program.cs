@@ -1,4 +1,5 @@
 using PersonalAssistant.Harness;
+using PersonalAssistant.Harness.Agents;
 using PersonalAssistant.Harness.Settings;
 using PersonalAssistant.Server.Endpoints;
 using Microsoft.Extensions.FileProviders;
@@ -17,6 +18,7 @@ var harnessRuntime = HarnessRuntime.Create(repositoryRoot, bootstrapEnvironment,
 
 builder.Services.AddSingleton<HarnessRuntime>(_ => harnessRuntime);
 builder.Services.AddSingleton<SettingsService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Settings);
+builder.Services.AddSingleton<IAgentSessionService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Agents);
 builder.Services.AddProblemDetails();
 builder.WebHost.UseUrls($"http://{harnessRuntime.Bootstrap.ServerHost}:{harnessRuntime.Bootstrap.ServerPort}");
 
@@ -30,6 +32,7 @@ if (Directory.Exists(dashboardRoot))
 }
 
 app.MapSettingsEndpoints();
+app.MapAgentEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 if (Directory.Exists(dashboardRoot))
 {
@@ -45,6 +48,7 @@ if (Directory.Exists(dashboardRoot))
         await context.Response.SendFileAsync(dashboardIndex);
     });
 }
+app.Lifetime.ApplicationStopping.Register(harnessRuntime.Dispose);
 app.Run();
 
 static string FindRepositoryRoot(string startPath)

@@ -13,6 +13,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Persistence/Migrations/001_settings_overrides.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/*.sql" />
   </ItemGroup>
 </Project>

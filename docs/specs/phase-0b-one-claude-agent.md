@@ -1,7 +1,7 @@
 # Phase 0B — One Claude agent persisted in tmux
 
 Spec version: 2
-Status: revised for implementation
+Status: implementation complete; review pending
 Depends on: Phase 0A implementation plus the 0A.1 corrective revision
 Architecture baseline: v1 at commit 13930c5
 Stack: C#/.NET ASP.NET Core backend plus React/Vite dashboard
@@ -179,9 +179,10 @@ The lifecycle service applies these rules:
 2. POST start sets `desired_state = running`, then ensures the session and
    native process. A launch failure leaves desired state `running` and records
    observed `error` plus a safe `last_error`, so a later reconcile can retry.
-3. POST stop sets `desired_state = stopped`, stops the native process/session,
-   and records `exited` or `error`. It never deletes the agent/session row or
-   runtime memory/handoff state.
+3. POST stop attempts to stop the native process/session, then records
+   `desired_state = stopped`, `exited` or `error`, `stopped_at`, and its
+   lifecycle activity in one persistence transaction. It never deletes the
+   agent/session row or runtime memory/handoff state.
 4. On reconcile, a healthy existing Claude process is adopted as `running`
    without relaunching or resuming it. Adoption is observation, not
    resurrection.
@@ -233,6 +234,9 @@ CREATE TABLE agents (
     working_directory TEXT NOT NULL,
     realms_json TEXT NOT NULL,
     skills_json TEXT NOT NULL,
+    browser_profile TEXT,
+    memory_scope TEXT,
+    scheduled_task_permissions_json TEXT NOT NULL,
     auto_start INTEGER NOT NULL CHECK (auto_start IN (0, 1)),
     desired_state TEXT NOT NULL CHECK (desired_state IN ('running', 'stopped')),
     created_at TEXT NOT NULL,
@@ -316,6 +320,7 @@ Expose the native boundary:
 
 ~~~text
 start(agent, session)
+startNewConversation(agent, session)
 stop(agent, session)
 getStatus(agent, session)
 tryResume(agent, session, nativeConversationRef)
@@ -329,9 +334,12 @@ private Claude storage, or emulates a vendor conversation protocol.
 Native conversation references are opaque strings returned by the adapter or
 runtime. Resume is attempted only through the documented runtime CLI contract
 (for example a supported `--resume` reference). If the runtime rejects or does
-not support resume, the adapter records a safe resume-unavailable result and
-launches a new native conversation. A healthy adopted process is never
-re-launched or resumed during reconciliation.
+not support resume, or the process becomes unhealthy immediately after a
+resume launch, the adapter records a safe resume-unavailable result and uses
+`startNewConversation`. A healthy adopted process is never re-launched or
+resumed during reconciliation. Conversation references enter persistence only
+through the adapter/service recording path; private native storage is never
+scanned.
 
 ## Harness lifecycle
 
@@ -365,10 +373,11 @@ report the failure safely.
 
 ### Stop
 
-1. set desired state to `stopped`;
-2. stop the managed native process/session;
-3. persist observed `exited` or `error` and `stopped_at`; and
-4. emit `agent.stop` or `agent.error`.
+1. resolve the known personal definition;
+2. attempt to stop the managed native process/session;
+3. persist desired `stopped`, observed `exited` or `error`, and `stopped_at`
+   together with `agent.stop` or `agent.error` in one SQLite transaction; and
+4. retain the logical agent, session row, and audit history.
 
 ## ASP.NET API
 
@@ -433,8 +442,10 @@ terminal stream, or second conversation model belongs in this slice.
 
 Against the ASP.NET-hosted dashboard, exercise GET status, Start/Stop error
 handling with unavailable native dependencies, and the visible desired versus
-observed state. Confirm dashboard closure does not own the tmux lifecycle. A
-real native smoke run is not required where tmux/Claude credentials are absent.
+observed state. After a failed Start, refresh the status and show persisted
+`desired: running` plus an observed error rather than stale stopped UI. Confirm
+dashboard closure does not own the tmux lifecycle. A real native smoke run is
+not required where tmux/Claude credentials are absent.
 
 ### Local smoke proof
 

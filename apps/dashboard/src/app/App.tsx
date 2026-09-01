@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { AgentControlCard } from "../features/agents/AgentControlCard";
 
 function normalizePath(pathname: string): string {
   const withoutTrailingSlash = pathname.replace(/\/+$/, "");
@@ -57,7 +58,7 @@ function AppShell({ currentPath, children }: { currentPath: string; children: Re
           <span className="status-orb status-orb--amber" aria-hidden="true" />
           <div>
             <span className="rail-footer__label">Local only</span>
-            <span className="rail-footer__detail">Providerless · Phase 0A</span>
+            <span className="rail-footer__detail">Native lifecycle · Phase 0B</span>
           </div>
         </div>
       </aside>
@@ -82,15 +83,18 @@ function AppShell({ currentPath, children }: { currentPath: string; children: Re
 
 function OverviewPage() {
   return (
-    <section className="overview-card" aria-labelledby="overview-title">
-      <span className="eyebrow">CONTROL PLANE / OVERVIEW</span>
-      <h1 id="overview-title">A quiet place to see what is configured.</h1>
-      <p>
-        The local dashboard starts with settings. Future agent and activity surfaces will use the same
-        effective configuration boundary.
-      </p>
-      <a className="button button--primary" href="/settings">Open settings <span aria-hidden="true">↗</span></a>
-    </section>
+    <div className="overview-stack">
+      <section className="overview-card" aria-labelledby="overview-title">
+        <span className="eyebrow">CONTROL PLANE / OVERVIEW</span>
+        <h1 id="overview-title">A quiet place to see what is configured.</h1>
+        <p>
+          Settings and native agent lifecycle now share one effective configuration boundary. Terminal
+          output and activity surfaces follow in the next slices.
+        </p>
+        <a className="button button--primary" href="/settings">Open settings <span aria-hidden="true">↗</span></a>
+      </section>
+      <AgentControlCard />
+    </div>
   );
 }
 

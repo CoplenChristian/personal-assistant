@@ -1,0 +1,343 @@
+using System.Diagnostics;
+using System.ComponentModel;
+using System.Globalization;
+using System.Text.RegularExpressions;
+using PersonalAssistant.Harness.Agents;
+
+namespace PersonalAssistant.Harness.Runtime;
+
+public sealed record TmuxCommandResult(int ExitCode, string StandardOutput, string StandardError);
+
+public interface ITmuxCommandExecutor
+{
+    TmuxCommandResult Execute(IReadOnlyList<string> arguments);
+}
+
+public interface INativeProcessInspector
+{
+    ProcessObservation Inspect(int processId, string expectedExecutable);
+}
+
+public sealed record ProcessObservation(bool IsAlive, bool IsExpectedRuntime);
+
+public sealed record TmuxHealth(
+    bool SessionDetected,
+    bool RuntimeHealthy,
+    SessionObservedState ObservedState,
+    string? Error);
+
+public sealed class ProcessTmuxCommandExecutor(string executable = "tmux") : ITmuxCommandExecutor
+{
+    public TmuxCommandResult Execute(IReadOnlyList<string> arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        try
+        {
+            using var process = Process.Start(startInfo)
+                ?? throw new TmuxUnavailableException("Unable to start the tmux executable.");
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return new TmuxCommandResult(process.ExitCode, standardOutput, standardError);
+        }
+        catch (Win32Exception exception)
+        {
+            throw new TmuxUnavailableException($"The tmux executable is unavailable: {exception.Message}");
+        }
+    }
+}
+
+public sealed class SystemNativeProcessInspector : INativeProcessInspector
+{
+    private static readonly Regex ProcessFields = new(@"^\s*(?<pid>[0-9]+)\s+(?<ppid>[0-9]+)\s+(?<comm>\S+)\s+(?<command>.*)$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    public ProcessObservation Inspect(int processId, string expectedExecutable)
+    {
+        var processes = ReadProcesses();
+        if (processes.Count == 0)
+        {
+            return new ProcessObservation(false, false);
+        }
+
+        var byParent = processes.ToLookup(process => process.ParentProcessId);
+        var queue = new Queue<int>([processId]);
+        var visited = new HashSet<int>();
+        var paneProcessFound = false;
+        while (queue.Count > 0)
+        {
+            var currentProcessId = queue.Dequeue();
+            if (!visited.Add(currentProcessId))
+            {
+                continue;
+            }
+
+            var process = processes.FirstOrDefault(item => item.ProcessId == currentProcessId);
+            if (process is not null)
+            {
+                paneProcessFound = true;
+                if (IsExpected(process, expectedExecutable))
+                {
+                    return new ProcessObservation(true, true);
+                }
+            }
+
+            foreach (var child in byParent[currentProcessId])
+            {
+                queue.Enqueue(child.ProcessId);
+            }
+        }
+
+        return new ProcessObservation(paneProcessFound, false);
+    }
+
+    private static IReadOnlyList<NativeProcess> ReadProcesses()
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "ps",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-axo");
+        startInfo.ArgumentList.Add("pid=,ppid=,comm=,command=");
+
+        try
+        {
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                return [];
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+            {
+                return [];
+            }
+
+            return output
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => ProcessFields.Match(line))
+                .Where(match => match.Success
+                    && int.TryParse(match.Groups["pid"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out _)
+                    && int.TryParse(match.Groups["ppid"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+                .Select(match => new NativeProcess(
+                    int.Parse(match.Groups["pid"].Value, CultureInfo.InvariantCulture),
+                    int.Parse(match.Groups["ppid"].Value, CultureInfo.InvariantCulture),
+                    match.Groups["comm"].Value,
+                    match.Groups["command"].Value))
+                .ToArray();
+        }
+        catch (Win32Exception)
+        {
+            return [];
+        }
+    }
+
+    private static bool IsExpected(NativeProcess process, string expectedExecutable)
+    {
+        return IsExpectedExecutable(process.CommandName, process.CommandLine, expectedExecutable);
+    }
+
+    public static bool IsExpectedExecutable(string commandName, string commandLine, string expectedExecutable)
+    {
+        var expectedName = Path.GetFileName(expectedExecutable);
+        var commandLineExecutable = commandLine.TrimStart().Split([' ', '\t'], 2)[0].Trim('"', '\'');
+        return new[] { commandName, commandLineExecutable }
+            .Select(Path.GetFileName)
+            .Any(candidate => string.Equals(candidate, expectedName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed record NativeProcess(int ProcessId, int ParentProcessId, string CommandName, string CommandLine);
+}
+
+public sealed class TmuxSessionManager
+{
+    private readonly string prefix;
+    private readonly ITmuxCommandExecutor executor;
+    private readonly INativeProcessInspector processInspector;
+
+    public TmuxSessionManager(
+        string prefix,
+        ITmuxCommandExecutor? executor = null,
+        INativeProcessInspector? processInspector = null)
+    {
+        this.prefix = prefix;
+        this.executor = executor ?? new ProcessTmuxCommandExecutor();
+        this.processInspector = processInspector ?? new SystemNativeProcessInspector();
+        if (prefix.Length == 0 || prefix.Any(char.IsWhiteSpace) || prefix.Any(character => character is '/' or '\\' or ':'))
+        {
+            throw new AgentConfigurationException("The tmux prefix is not session-safe.");
+        }
+    }
+
+    public bool HasSession(string name)
+    {
+        ValidateSessionName(name);
+        return executor.Execute(["has-session", "-t", name]).ExitCode == 0;
+    }
+
+    public void EnsureSession(string name, string workingDirectory)
+    {
+        ValidateSessionName(name);
+        ValidateWorkingDirectory(workingDirectory);
+        if (HasSession(name))
+        {
+            return;
+        }
+
+        var result = executor.Execute(["new-session", "-d", "-s", name, "-c", workingDirectory, "/bin/sh"]);
+        EnsureSuccess(result, "Unable to create the tmux session.");
+    }
+
+    public void LaunchProcess(string name, string workingDirectory, string executable, IReadOnlyList<string> arguments)
+    {
+        ValidateSessionName(name);
+        ValidateWorkingDirectory(workingDirectory);
+        ValidateCommandPart(executable);
+        foreach (var argument in arguments)
+        {
+            ValidateCommandPart(argument);
+        }
+
+        if (!HasSession(name))
+        {
+            throw new TmuxOperationException("agent_session_missing", "The tmux session does not exist.");
+        }
+
+        var command = new List<string> { "respawn-pane", "-k", "-t", $"{name}:0.0", "-c", workingDirectory, "--", executable };
+        command.AddRange(arguments);
+        var result = executor.Execute(command);
+        EnsureSuccess(result, "Unable to launch the native runtime in tmux.");
+    }
+
+    public void StopSession(string name)
+    {
+        ValidateSessionName(name);
+        if (!HasSession(name))
+        {
+            return;
+        }
+
+        var result = executor.Execute(["kill-session", "-t", name]);
+        EnsureSuccess(result, "Unable to stop the tmux session.");
+    }
+
+    public TmuxHealth GetHealth(string name, string expectedRuntime)
+    {
+        ValidateSessionName(name);
+        try
+        {
+            if (!HasSession(name))
+            {
+                return new TmuxHealth(false, false, SessionObservedState.Missing, null);
+            }
+
+            var result = executor.Execute(["list-panes", "-t", $"{name}:0.0", "-F", "#{pane_pid}\t#{pane_current_command}"]);
+            if (result.ExitCode != 0)
+            {
+                return new TmuxHealth(true, false, SessionObservedState.Error, "Unable to inspect the tmux pane.");
+            }
+
+            var line = result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+            if (line is null)
+            {
+                return new TmuxHealth(true, false, SessionObservedState.Exited, "The tmux pane has no foreground process.");
+            }
+
+            var fields = line.Split('\t', 2);
+            if (fields.Length == 0 || !int.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out var panePid))
+            {
+                return new TmuxHealth(true, false, SessionObservedState.Error, "The tmux pane returned an invalid process id.");
+            }
+
+            var currentCommand = fields.Length == 2 ? fields[1].Trim() : string.Empty;
+            var observation = processInspector.Inspect(panePid, expectedRuntime);
+            if (!observation.IsAlive)
+            {
+                return new TmuxHealth(true, false, SessionObservedState.Exited, "The native process has exited.");
+            }
+
+            if (!observation.IsExpectedRuntime && !IsExpectedCommand(currentCommand, expectedRuntime))
+            {
+                return new TmuxHealth(true, false, SessionObservedState.Exited, "The tmux pane is not running the expected native runtime.");
+            }
+
+            return new TmuxHealth(true, true, SessionObservedState.Running, null);
+        }
+        catch (TmuxUnavailableException exception)
+        {
+            return new TmuxHealth(false, false, SessionObservedState.Error, exception.Message);
+        }
+    }
+
+    public IReadOnlyList<string> ListManagedSessions()
+    {
+        var result = executor.Execute(["list-sessions", "-F", "#{session_name}"]);
+        EnsureSuccess(result, "Unable to list tmux sessions.");
+        return result.StandardOutput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(session => session.Trim())
+            .Where(session => session.StartsWith(prefix, StringComparison.Ordinal))
+            .ToArray();
+    }
+
+    private static void ValidateWorkingDirectory(string workingDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(workingDirectory) || !Directory.Exists(workingDirectory))
+        {
+            throw new AgentConfigurationException("The tmux working directory must exist.");
+        }
+    }
+
+    private static void ValidateCommandPart(string value)
+    {
+        if (value is null || value.Contains('\0') || value.Contains('\r') || value.Contains('\n'))
+        {
+            throw new AgentConfigurationException("A tmux command argument contains an invalid control character.");
+        }
+    }
+
+    private void ValidateSessionName(string name)
+    {
+        AgentRegistry.ValidateSessionName(name);
+        if (!name.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            throw new AgentConfigurationException("The tmux session is outside the configured harness prefix.");
+        }
+
+        AgentRegistry.ValidateIdentity(name[prefix.Length..]);
+    }
+
+    private static bool IsExpectedCommand(string command, string expectedExecutable)
+    {
+        return SystemNativeProcessInspector.IsExpectedExecutable(string.Empty, command, expectedExecutable);
+    }
+
+    private static void EnsureSuccess(TmuxCommandResult result, string message)
+    {
+        if (result.ExitCode != 0)
+        {
+            throw new TmuxOperationException("agent_runtime_unavailable", message);
+        }
+    }
+}
+
+public sealed class TmuxUnavailableException(string message) : Exception(message);
+
+public sealed class TmuxOperationException(string code, string message) : AgentLifecycleException(code, message);

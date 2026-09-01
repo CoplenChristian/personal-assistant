@@ -6,10 +6,10 @@ the local dashboard. The native CLIs remain the model runtimes.
 
 ## Status
 
-This repository is an architecture scaffold with the Phase 0A
-configuration/settings vertical slice implemented and reviewed. The native
-agent runtime and external integrations remain deferred. The documents in this
-repository are the current design and implementation baseline.
+This repository contains the reviewed Phase 0A configuration/settings slice
+and the Phase 0B one-agent lifecycle implementation. Terminal streaming,
+external integrations, and later agent lifecycle features remain deferred. The
+documents in this repository are the current design and implementation baseline.
 
 The first implementation slice is configuration/settings because it gives the
 later runtime a single lifecycle for defaults, overrides, validation, and
@@ -152,11 +152,12 @@ runtime/              Ignored local state created when the harness runs
 
 ## Roadmap
 
-Phase 0A now includes the typed configuration registry, SQLite override store,
+Phase 0A includes the typed configuration registry, SQLite override store,
 localhost Settings API, real Settings route, privacy check, and providerless
-tests. Later Phase 0 slices add the native agent harness; later phases add
-document indexing, external integrations, browser providers, scheduling,
-collaboration, and hardening.
+tests. Phase 0B adds one persisted Claude agent with desired/observed state,
+safe tmux lifecycle management, and minimal status controls. Later slices add
+terminal streaming, document indexing, external integrations, browser
+providers, scheduling, collaboration, and hardening.
 
 See [docs/roadmap.md](docs/roadmap.md) for acceptance gates and
 [docs/development.md](docs/development.md) for the implementation order.

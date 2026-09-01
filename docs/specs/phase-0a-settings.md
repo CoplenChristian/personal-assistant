@@ -1,7 +1,7 @@
 # Phase 0A — Settings and configuration
 
 Spec version: 1.1
-Status: implementation complete; 0A.1 corrective revision in progress
+Status: implementation complete; 0A.1 corrective revision complete; review complete
 Architecture baseline: v1 at commit 13930c5
 Stack: React/Vite dashboard plus C#/.NET ASP.NET Core backend
 

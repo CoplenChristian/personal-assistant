@@ -1,12 +1,13 @@
 # Harness core
 
-The C#/.NET class library for the reusable Phase 0A local control plane.
+The C#/.NET class library for the reusable Phase 0A/0B local control plane.
 
 Planned domains:
 
-- agent definitions and registry reconciliation
-- tmux session lifecycle
-- native runtime session persistence and rotation
+- reviewed agent definitions and registry reconciliation
+- tmux session lifecycle and process-aware health
+- native runtime session persistence
+- ordered SQLite migrations and shared activity persistence
 - scheduler and per-agent prompt queues
 - activity/event bus
 

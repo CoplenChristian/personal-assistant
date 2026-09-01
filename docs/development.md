@@ -1,7 +1,8 @@
 # Development notes
 
-Phase 0A settings/configuration is implemented and reviewed. The native agent
-runtime and external integrations remain deferred.
+Phase 0A settings/configuration is implemented and reviewed. Phase 0B now
+covers one native Claude lifecycle; terminal streaming and external
+integrations remain deferred.
 
 ## Local prerequisites
 
@@ -92,6 +93,21 @@ Implement the narrow settings vertical slice in this order:
    behavior.
 9. Only after this foundation is reviewed, let later runtime modules consume
    effective settings.
+
+## Phase 0B lifecycle implementation order
+
+The first native-runtime slice keeps lifecycle state and process ownership
+small:
+
+1. load the reviewed personal manifest into a typed AgentRegistry;
+2. persist desired agent state and observed session state through the shared
+   SQLite migration/activity boundary;
+3. reconcile one prefixed tmux session with process-aware health;
+4. keep Claude launch/resume behind a native runtime adapter; and
+5. expose status/start/stop without adding terminal input or streaming.
+
+The Phase 0B contract and its explicit deferrals are in
+[specs/phase-0b-one-claude-agent.md](specs/phase-0b-one-claude-agent.md).
 
 ## Required backend tests
 

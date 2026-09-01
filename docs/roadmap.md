@@ -49,15 +49,24 @@ Acceptance gate:
 
 ## Phase 0B — One Claude agent persisted in tmux
 
+Status: implementation complete; review pending.
+
 Outcome: one configured Claude agent can be started, stopped, and resumed as a
 logical agent with state persisted independently of the browser.
 
 Acceptance gate:
 
-- [ ] A configured personal agent launches the native claude CLI inside pa-personal.
-- [ ] The logical agent and native session records persist in SQLite.
+- [ ] A configured personal agent launches the native claude CLI inside the
+  configured prefixed tmux session.
+- [ ] Desired agent state and observed session state persist separately in
+  SQLite.
+- [ ] Ordered migrations, foreign keys, and one-session-per-agent constraints
+  are enforced.
 - [ ] Closing the dashboard does not kill the agent.
-- [ ] Restarting the harness reconciles and resumes the session when possible.
+- [ ] Restarting the harness adopts healthy Claude processes and only repairs a
+  missing/dead session when desired state is running.
+- [ ] The lifecycle control surface distinguishes tmux presence from a healthy
+  Claude process.
 - [ ] No model API integration exists.
 
 ## Phase 0C — Terminal dashboard, activity, and session hygiene

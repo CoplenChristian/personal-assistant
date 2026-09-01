@@ -1,23 +1,31 @@
 using PersonalAssistant.Harness.Bootstrap;
+using PersonalAssistant.Harness.Agents;
 using PersonalAssistant.Harness.Persistence;
 using PersonalAssistant.Harness.Policies;
+using PersonalAssistant.Harness.Runtime;
 using PersonalAssistant.Harness.Settings;
 
 namespace PersonalAssistant.Harness;
 
 public sealed class HarnessRuntime : IDisposable
 {
-    private readonly ISettingsOverrideStore store;
+    private readonly SqliteHarnessDatabase database;
 
-    private HarnessRuntime(SettingsService settings, ISettingsOverrideStore store, BootstrapConfiguration bootstrap)
+    private HarnessRuntime(
+        SettingsService settings,
+        SqliteHarnessDatabase database,
+        BootstrapConfiguration bootstrap,
+        IAgentSessionService agents)
     {
         Settings = settings;
-        this.store = store;
+        this.database = database;
         Bootstrap = bootstrap;
+        Agents = agents;
     }
 
     public SettingsService Settings { get; }
     public BootstrapConfiguration Bootstrap { get; }
+    public IAgentSessionService Agents { get; }
 
     public static HarnessRuntime Create(
         string repositoryRoot,
@@ -34,19 +42,27 @@ public sealed class HarnessRuntime : IDisposable
             defaults.CheckpointBeforeRotation);
         var context = new SettingsContext(root, bootstrap, defaults, policies);
         var databasePath = Path.Combine(bootstrap.RuntimeDirectory, "personal-assistant.sqlite");
-        var store = new SqliteSettingsOverrideStore(databasePath);
+        var database = new SqliteHarnessDatabase(databasePath);
         try
         {
+            var store = new SqliteSettingsOverrideStore(database);
             var service = new SettingsService(SettingsRegistry.CreateDefault(), context, store);
             _ = service.GetSnapshot();
-            return new HarnessRuntime(service, store, bootstrap);
+            var registry = new AgentRegistry(root, bootstrap.TmuxPrefix);
+            _ = registry.LoadPersonal();
+            var agentStore = new SqliteAgentSessionStore(database);
+            var tmux = new TmuxSessionManager(bootstrap.TmuxPrefix);
+            var agents = new AgentSessionService(registry, agentStore, tmux, new ClaudeRuntimeAdapter(tmux));
+            var runtime = new HarnessRuntime(service, database, bootstrap, agents);
+            agents.ReconcilePersonal();
+            return runtime;
         }
         catch
         {
-            store.Dispose();
+            database.Dispose();
             throw;
         }
     }
 
-    public void Dispose() => store.Dispose();
+    public void Dispose() => database.Dispose();
 }

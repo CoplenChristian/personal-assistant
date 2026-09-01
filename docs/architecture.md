@@ -2,7 +2,8 @@
 
 This document is the current planning and implementation baseline for the
 Personal Assistant Harness. Phase 0A settings is implemented and reviewed;
-native runtime and external integrations remain deferred.
+Phase 0B covers one native Claude lifecycle; terminal streaming and external
+integrations remain deferred.
 
 ## 1. Core principle
 

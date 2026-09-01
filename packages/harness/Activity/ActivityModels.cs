@@ -32,4 +32,39 @@ public sealed record ActivityEvent(
                 scope = "global",
                 requiresRestart
             }));
+
+    public static ActivityEvent AgentLifecycle(
+        string agentId,
+        string? realm,
+        string operation,
+        string target,
+        string status,
+        string desiredState,
+        string observedState,
+        bool adopted = false,
+        bool resumeAttempted = false,
+        bool resumeFallback = false,
+        string? errorCode = null,
+        string? eventType = null) =>
+        new(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            agentId,
+            realm,
+            "agents",
+            operation,
+            target,
+            status,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                eventType = eventType ?? $"agent.{operation}",
+                agentId,
+                desiredState,
+                observedState,
+                adopted,
+                resumeAttempted,
+                resumeFallback,
+                errorCode
+            }));
 }

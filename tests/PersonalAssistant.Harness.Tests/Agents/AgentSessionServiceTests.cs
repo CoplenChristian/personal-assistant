@@ -202,6 +202,66 @@ public sealed class AgentSessionServiceTests
     }
 
     [Fact]
+    public void Reconcile_adopts_versioned_claude_without_relaunching_or_killing_it()
+    {
+        using var fixture = new AgentFixture();
+        fixture.Store.EnsureAgent(fixture.Definition);
+        fixture.Store.SetDesiredState(fixture.Definition.Id, AgentDesiredState.Running);
+        fixture.Tmux.SessionExists = true;
+        fixture.Tmux.NativeProcess = true;
+        fixture.Tmux.ProcessIdentityMatches = false;
+        fixture.Tmux.PaneStartCommand = "claude";
+        fixture.Tmux.PaneCurrentCommand = "2.1.112";
+
+        var status = fixture.Service.ReconcilePersonal();
+
+        Assert.True(status.RuntimeHealthy);
+        Assert.Equal(SessionObservedState.Running, status.Session.ObservedState);
+        Assert.DoesNotContain(fixture.Tmux.Commands, command => command[0] == "respawn-pane");
+        var healthCommand = fixture.Tmux.Commands.Single(command => command[0] == "list-panes");
+        Assert.Contains("#{pane_pid}", healthCommand[4], StringComparison.Ordinal);
+        Assert.Contains("#{pane_dead}", healthCommand[4], StringComparison.Ordinal);
+        Assert.Contains("#{pane_start_command}", healthCommand[4], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Reconcile_does_not_destructively_repair_a_live_unverified_pane()
+    {
+        using var fixture = new AgentFixture();
+        fixture.Store.EnsureAgent(fixture.Definition);
+        fixture.Store.SetDesiredState(fixture.Definition.Id, AgentDesiredState.Running);
+        fixture.Tmux.SessionExists = true;
+        fixture.Tmux.NativeProcess = true;
+        fixture.Tmux.PaneStartCommand = string.Empty;
+        fixture.Tmux.PaneCurrentCommand = "2.1.112";
+
+        var status = fixture.Service.ReconcilePersonal();
+        var health = fixture.TmuxManager.GetHealth(fixture.Definition.TmuxSessionName, "claude");
+
+        Assert.False(status.RuntimeHealthy);
+        Assert.Equal(SessionObservedState.Error, status.Session.ObservedState);
+        Assert.False(health.RepairEligible);
+        Assert.DoesNotContain(fixture.Tmux.Commands, command => command[0] == "respawn-pane");
+    }
+
+    [Fact]
+    public void Start_refuses_to_kill_a_live_unverified_pane()
+    {
+        using var fixture = new AgentFixture();
+        fixture.Tmux.SessionExists = true;
+        fixture.Tmux.NativeProcess = true;
+        fixture.Tmux.PaneStartCommand = string.Empty;
+        fixture.Tmux.PaneCurrentCommand = "2.1.112";
+
+        Assert.ThrowsAny<AgentLifecycleException>(() => fixture.Service.StartPersonal());
+        var status = fixture.Store.ReadStatus(fixture.Definition);
+
+        Assert.Equal(AgentDesiredState.Running, status.DesiredState);
+        Assert.Equal(SessionObservedState.Error, status.Session.ObservedState);
+        Assert.DoesNotContain(fixture.Tmux.Commands, command => command[0] == "respawn-pane");
+    }
+
+    [Fact]
     public void Reconcile_recreates_a_missing_session_when_desired_state_is_running()
     {
         using var fixture = new AgentFixture();
@@ -223,9 +283,11 @@ public sealed class AgentSessionServiceTests
         fixture.Store.EnsureAgent(fixture.Definition);
 
         var status = fixture.Service.ReconcilePersonal();
+        var health = fixture.TmuxManager.GetHealth(fixture.Definition.TmuxSessionName, "claude");
 
         Assert.Equal(AgentDesiredState.Stopped, status.DesiredState);
         Assert.Equal(SessionObservedState.Missing, status.Session.ObservedState);
+        Assert.True(health.RepairEligible);
         Assert.DoesNotContain(fixture.Tmux.Commands, command => command[0] is "new-session" or "respawn-pane");
     }
 
@@ -235,6 +297,8 @@ public sealed class AgentSessionServiceTests
         using var fixture = new AgentFixture();
         fixture.Tmux.SessionExists = true;
         fixture.Tmux.NativeProcess = false;
+        fixture.Tmux.PaneStartCommand = "/bin/sh";
+        fixture.Tmux.PaneCurrentCommand = "sh";
 
         var health = fixture.TmuxManager.GetHealth(fixture.Definition.TmuxSessionName, "claude");
 
@@ -248,6 +312,7 @@ public sealed class AgentSessionServiceTests
     {
         using var fixture = new AgentFixture();
         fixture.Tmux.SessionExists = true;
+        fixture.Tmux.PaneDead = true;
         fixture.Tmux.FailResume = true;
         fixture.Store.EnsureAgent(fixture.Definition);
         fixture.Store.RecordConversationReference(fixture.Definition.Id, "opaque-reference");
@@ -266,6 +331,7 @@ public sealed class AgentSessionServiceTests
     {
         using var fixture = new AgentFixture();
         fixture.Tmux.SessionExists = true;
+        fixture.Tmux.PaneDead = true;
         fixture.Tmux.ResumeProcessExits = true;
         fixture.Store.EnsureAgent(fixture.Definition);
         fixture.Store.RecordConversationReference(fixture.Definition.Id, "opaque-reference");
@@ -392,6 +458,10 @@ public sealed class AgentSessionServiceTests
         public List<IReadOnlyList<string>> Commands { get; } = [];
         public bool SessionExists { get; set; }
         public bool NativeProcess { get; set; }
+        public bool PaneDead { get; set; }
+        public string PaneStartCommand { get; set; } = "claude";
+        public string PaneCurrentCommand { get; set; } = "claude";
+        public bool ProcessIdentityMatches { get; set; } = true;
         public bool FailResume { get; set; }
         public bool ResumeProcessExits { get; set; }
         public bool FailKill { get; set; }
@@ -415,6 +485,9 @@ public sealed class AgentSessionServiceTests
         {
             SessionExists = true;
             NativeProcess = false;
+            PaneDead = false;
+            PaneStartCommand = "/bin/sh";
+            PaneCurrentCommand = "sh";
             return new TmuxCommandResult(0, string.Empty, string.Empty);
         }
 
@@ -428,10 +501,19 @@ public sealed class AgentSessionServiceTests
             if (ResumeProcessExits && arguments.Contains("--resume", StringComparer.Ordinal))
             {
                 NativeProcess = false;
+                PaneDead = true;
                 return new TmuxCommandResult(0, string.Empty, string.Empty);
             }
 
             NativeProcess = true;
+            PaneDead = false;
+            var separator = arguments.ToList().IndexOf("--");
+            if (separator >= 0 && separator + 1 < arguments.Count)
+            {
+                PaneStartCommand = arguments[separator + 1];
+            }
+
+            PaneCurrentCommand = PaneStartCommand == "claude" ? "claude" : PaneStartCommand;
             return new TmuxCommandResult(0, string.Empty, string.Empty);
         }
 
@@ -448,12 +530,15 @@ public sealed class AgentSessionServiceTests
         }
 
         private TmuxCommandResult ListPane() =>
-            new(0, "123\tclaude\n", string.Empty);
+            new(
+                0,
+                $"123\t{(PaneDead ? "1" : "0")}\t{PaneStartCommand}\t{PaneCurrentCommand}\n",
+                string.Empty);
     }
 
     private sealed class FakeProcessInspector(FakeTmuxExecutor tmux) : INativeProcessInspector
     {
         public ProcessObservation Inspect(int processId, string expectedExecutable) =>
-            new(tmux.NativeProcess, tmux.NativeProcess);
+            new(tmux.NativeProcess, tmux.ProcessIdentityMatches);
     }
 }

@@ -48,7 +48,6 @@ if (Directory.Exists(dashboardRoot))
         await context.Response.SendFileAsync(dashboardIndex);
     });
 }
-app.Lifetime.ApplicationStopping.Register(harnessRuntime.Dispose);
 app.Run();
 
 static string FindRepositoryRoot(string startPath)

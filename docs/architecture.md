@@ -234,6 +234,11 @@ without a valid agent definition is visible as an unconfigured/blocked state;
 it does not receive capabilities. A configured agent can be stopped without
 deleting its definition or runtime memory.
 
+Phase 0B health uses tmux pane provenance (`pane_start_command` and
+`pane_dead`) as the ownership signal. A mutable native process title cannot
+invalidate an owned live pane, and a live pane with unknown provenance is never
+destructively repaired.
+
 Agent lifecycle rules:
 
 - Create is an explicit dashboard action that validates an ID, runtime, realm,

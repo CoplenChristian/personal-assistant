@@ -1,7 +1,7 @@
 # Phase 0B — One Claude agent persisted in tmux
 
 Spec version: 2
-Status: implementation complete; review complete
+Status: implementation complete; corrective review complete
 Depends on: Phase 0A implementation plus the 0A.1 corrective revision
 Architecture baseline: v1 at commit 13930c5
 Stack: C#/.NET ASP.NET Core backend plus React/Vite dashboard
@@ -44,6 +44,8 @@ Phase 0B is complete when:
 - browser/dashboard closure does not stop the agent;
 - harness restart reconciles an existing tmux session without relaunching a
   healthy process;
+- Claude Code process-title changes do not turn a healthy owned pane into a
+  destructive repair candidate;
 - a missing session is recreated only when the persisted desired state is
   `running`;
 - startup attempts native resume through the runtime adapter when an opaque
@@ -310,9 +312,16 @@ directory, the target session, and the executable/argument contract before
 execution. The fake executor records the exact argument array for tests.
 
 Health requires both a live tmux session and a foreground/process-tree
-observation identifying the expected native runtime. The implementation must
-not treat tmux existence alone as health. A shell, exited Claude process, or
-unrecognized foreground process returns a non-running observation.
+observation identifying the expected native runtime. The tmux pane metadata
+query includes `pane_pid`, `pane_dead`, `pane_start_command`, and
+`pane_current_command`. For a pane launched by this harness, a non-dead pane
+whose `pane_start_command` executable is `claude` is an owned healthy session;
+the process tree is supplemental and a mutable Claude process title cannot
+invalidate that provenance. A non-dead pane with a known non-Claude start
+command is a repairable known-wrong pane. A live pane with missing or
+unverifiable start provenance is `error`/unknown and is never destructively
+repaired. A dead pane or missing pane is repairable. Tmux existence alone is
+never health.
 
 ### ClaudeRuntimeAdapter
 
@@ -425,6 +434,8 @@ terminal stream, or second conversation model belongs in this slice.
 - only Claude is launchable in 0B;
 - tmux command arguments pass literally through a fake executor;
 - process-aware health rejects a shell/dead/unrecognized process;
+- process-aware health trusts `pane_start_command`/`pane_dead` when Claude's
+  process title has changed, without allowing a live unknown pane to be killed;
 - first registration derives desired state from `auto_start`;
 - explicit stop survives manifest reload and harness restart;
 - start creates exactly one session and repeated start adopts/idempotently

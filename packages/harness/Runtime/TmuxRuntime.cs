@@ -24,7 +24,8 @@ public sealed record TmuxHealth(
     bool SessionDetected,
     bool RuntimeHealthy,
     SessionObservedState ObservedState,
-    string? Error);
+    string? Error,
+    bool RepairEligible = false);
 
 public sealed class ProcessTmuxCommandExecutor(string executable = "tmux") : ITmuxCommandExecutor
 {
@@ -245,10 +246,16 @@ public sealed class TmuxSessionManager
         {
             if (!HasSession(name))
             {
-                return new TmuxHealth(false, false, SessionObservedState.Missing, null);
+                return new TmuxHealth(false, false, SessionObservedState.Missing, null, true);
             }
 
-            var result = executor.Execute(["list-panes", "-t", $"{name}:0.0", "-F", "#{pane_pid}\t#{pane_current_command}"]);
+            var result = executor.Execute([
+                "list-panes",
+                "-t",
+                $"{name}:0.0",
+                "-F",
+                "#{pane_pid}\t#{pane_dead}\t#{pane_start_command}\t#{pane_current_command}"
+            ]);
             if (result.ExitCode != 0)
             {
                 return new TmuxHealth(true, false, SessionObservedState.Error, "Unable to inspect the tmux pane.");
@@ -257,28 +264,41 @@ public sealed class TmuxSessionManager
             var line = result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
             if (line is null)
             {
-                return new TmuxHealth(true, false, SessionObservedState.Exited, "The tmux pane has no foreground process.");
+                return new TmuxHealth(true, false, SessionObservedState.Exited, "The tmux pane is missing.", true);
             }
 
-            var fields = line.Split('\t', 2);
-            if (fields.Length == 0 || !int.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out var panePid))
+            var fields = line.Split('\t', 4);
+            if (fields.Length < 4
+                || !int.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out var panePid)
+                || panePid <= 0
+                || !TryParsePaneDead(fields[1], out var paneDead))
             {
                 return new TmuxHealth(true, false, SessionObservedState.Error, "The tmux pane returned an invalid process id.");
             }
 
-            var currentCommand = fields.Length == 2 ? fields[1].Trim() : string.Empty;
-            var observation = processInspector.Inspect(panePid, expectedRuntime);
-            if (!observation.IsAlive)
+            var paneStartCommand = fields[2].Trim();
+            var currentCommand = fields[3].Trim();
+            if (paneDead)
             {
-                return new TmuxHealth(true, false, SessionObservedState.Exited, "The native process has exited.");
+                return new TmuxHealth(true, false, SessionObservedState.Exited, "The tmux pane is marked dead.", true);
             }
 
-            if (!observation.IsExpectedRuntime && !IsExpectedCommand(currentCommand, expectedRuntime))
+            if (string.IsNullOrWhiteSpace(paneStartCommand))
             {
-                return new TmuxHealth(true, false, SessionObservedState.Exited, "The tmux pane is not running the expected native runtime.");
+                return new TmuxHealth(true, false, SessionObservedState.Error, "The live tmux pane owner could not be verified.");
             }
 
-            return new TmuxHealth(true, true, SessionObservedState.Running, null);
+            var paneOwnerIsExpected = IsExpectedCommand(paneStartCommand, expectedRuntime);
+            if (paneOwnerIsExpected)
+            {
+                // Process-title inspection is supplemental. Claude Code may deliberately change
+                // its OS-level process title after launch, so a mismatch cannot invalidate tmux
+                // provenance recorded in pane_start_command.
+                _ = processInspector.Inspect(panePid, expectedRuntime);
+                return new TmuxHealth(true, true, SessionObservedState.Running, null);
+            }
+
+            return new TmuxHealth(true, false, SessionObservedState.Exited, $"The pane was started by an unexpected command ({currentCommand}).", true);
         }
         catch (TmuxUnavailableException exception)
         {
@@ -327,6 +347,22 @@ public sealed class TmuxSessionManager
     private static bool IsExpectedCommand(string command, string expectedExecutable)
     {
         return SystemNativeProcessInspector.IsExpectedExecutable(string.Empty, command, expectedExecutable);
+    }
+
+    private static bool TryParsePaneDead(string value, out bool paneDead)
+    {
+        switch (value.Trim())
+        {
+            case "0":
+                paneDead = false;
+                return true;
+            case "1":
+                paneDead = true;
+                return true;
+            default:
+                paneDead = false;
+                return false;
+        }
     }
 
     private static void EnsureSuccess(TmuxCommandResult result, string message)

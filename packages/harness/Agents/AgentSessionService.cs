@@ -96,7 +96,9 @@ public sealed class AgentSessionService : IAgentSessionService
         var startResult = (ClaudeStartResult?)null;
         var adopted = health.RuntimeHealthy;
 
-        if (!health.RuntimeHealthy && status.DesiredState == AgentDesiredState.Running)
+        if (!health.RuntimeHealthy
+            && status.DesiredState == AgentDesiredState.Running
+            && (health.RepairEligible || !health.SessionDetected))
         {
             try
             {
@@ -166,6 +168,11 @@ public sealed class AgentSessionService : IAgentSessionService
 
         try
         {
+            if (health.SessionDetected && !health.RepairEligible)
+            {
+                throw new AgentLifecycleException("agent_session_unverified", "The live tmux pane owner could not be verified safely.");
+            }
+
             tmux.EnsureSession(definition.TmuxSessionName, definition.WorkingDirectory);
             status = store.RecordObservation(definition, SessionObservedState.Starting, null, null);
             var startResult = claude.Start(definition, status.Session);

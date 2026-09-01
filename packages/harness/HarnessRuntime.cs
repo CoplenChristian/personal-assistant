@@ -10,22 +10,26 @@ namespace PersonalAssistant.Harness;
 public sealed class HarnessRuntime : IDisposable
 {
     private readonly SqliteHarnessDatabase database;
+    private readonly TmuxTerminalStream terminalStream;
 
     private HarnessRuntime(
         SettingsService settings,
         SqliteHarnessDatabase database,
         BootstrapConfiguration bootstrap,
-        IAgentSessionService agents)
+        IAgentSessionService agents,
+        TmuxTerminalStream terminalStream)
     {
         Settings = settings;
         this.database = database;
         Bootstrap = bootstrap;
         Agents = agents;
+        this.terminalStream = terminalStream;
     }
 
     public SettingsService Settings { get; }
     public BootstrapConfiguration Bootstrap { get; }
     public IAgentSessionService Agents { get; }
+    public TmuxTerminalStream TerminalStream => terminalStream;
 
     public static HarnessRuntime Create(
         string repositoryRoot,
@@ -43,6 +47,7 @@ public sealed class HarnessRuntime : IDisposable
         var context = new SettingsContext(root, bootstrap, defaults, policies);
         var databasePath = Path.Combine(bootstrap.RuntimeDirectory, "personal-assistant.sqlite");
         var database = new SqliteHarnessDatabase(databasePath);
+        TmuxTerminalStream? terminalStream = null;
         try
         {
             var store = new SqliteSettingsOverrideStore(database);
@@ -53,16 +58,22 @@ public sealed class HarnessRuntime : IDisposable
             var agentStore = new SqliteAgentSessionStore(database);
             var tmux = new TmuxSessionManager(bootstrap.TmuxPrefix);
             var agents = new AgentSessionService(registry, agentStore, tmux, new ClaudeRuntimeAdapter(tmux));
-            var runtime = new HarnessRuntime(service, database, bootstrap, agents);
+            terminalStream = new TmuxTerminalStream(tmux, bootstrap.RuntimeDirectory);
+            var runtime = new HarnessRuntime(service, database, bootstrap, agents, terminalStream);
             agents.ReconcilePersonal();
             return runtime;
         }
         catch
         {
+            terminalStream?.Dispose();
             database.Dispose();
             throw;
         }
     }
 
-    public void Dispose() => database.Dispose();
+    public void Dispose()
+    {
+        terminalStream.Dispose();
+        database.Dispose();
+    }
 }

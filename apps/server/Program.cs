@@ -1,6 +1,7 @@
 using PersonalAssistant.Harness;
 using PersonalAssistant.Harness.Agents;
 using PersonalAssistant.Harness.Settings;
+using PersonalAssistant.Harness.Runtime;
 using PersonalAssistant.Server.Endpoints;
 using Microsoft.Extensions.FileProviders;
 
@@ -19,10 +20,15 @@ var harnessRuntime = HarnessRuntime.Create(repositoryRoot, bootstrapEnvironment,
 builder.Services.AddSingleton<HarnessRuntime>(_ => harnessRuntime);
 builder.Services.AddSingleton<SettingsService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Settings);
 builder.Services.AddSingleton<IAgentSessionService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Agents);
+builder.Services.AddSingleton<TmuxTerminalStream>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalStream);
 builder.Services.AddProblemDetails();
 builder.WebHost.UseUrls($"http://{harnessRuntime.Bootstrap.ServerHost}:{harnessRuntime.Bootstrap.ServerPort}");
 
 var app = builder.Build();
+app.UseWebSockets(new WebSocketOptions
+{
+    KeepAliveInterval = TimeSpan.FromSeconds(30)
+});
 var dashboardRoot = Path.Combine(repositoryRoot, "apps", "dashboard", "dist");
 if (Directory.Exists(dashboardRoot))
 {
@@ -33,6 +39,7 @@ if (Directory.Exists(dashboardRoot))
 
 app.MapSettingsEndpoints();
 app.MapAgentEndpoints();
+app.MapTerminalEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 if (Directory.Exists(dashboardRoot))
 {

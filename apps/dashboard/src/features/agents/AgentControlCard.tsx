@@ -134,7 +134,7 @@ export function AgentControlCard() {
 
           <p className="agent-card__note">
             {status.runtimeHealthy
-              ? "Claude is present in the managed session. Terminal output arrives in the next slice."
+              ? "Claude is present in the managed session. Open the terminal workspace to observe it."
               : status.lastError ?? "The session is not running a healthy Claude process."}
           </p>
 
@@ -148,7 +148,8 @@ export function AgentControlCard() {
                 {action === "start" ? "Starting…" : "Start agent"}
               </button>
             )}
-            <span className="agent-card__boundary">No prompt input in 0B</span>
+            <a className="text-button agent-card__open" href="/agents/personal">Open terminal <span aria-hidden="true">↗</span></a>
+            <span className="agent-card__boundary">No prompt input in 0C</span>
           </div>
           {message ? <p className="agent-card__feedback" role="status">{message}</p> : null}
           {error ? <p className="agent-card__feedback agent-card__feedback--error" role="alert">{error}</p> : null}

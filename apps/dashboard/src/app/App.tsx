@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { AgentControlCard } from "../features/agents/AgentControlCard";
+import { PersonalAgentPage } from "../features/agents/PersonalAgentPage";
 
 function normalizePath(pathname: string): string {
   const withoutTrailingSlash = pathname.replace(/\/+$/, "");
@@ -51,6 +52,7 @@ function AppShell({ currentPath, children }: { currentPath: string; children: Re
         <nav className="rail-nav" aria-label="Primary navigation">
           <span className="rail-nav__caption">Workspace</span>
           <NavItem href="/" label="Overview" currentPath={currentPath} />
+          <NavItem href="/agents/personal" label="Personal agent" currentPath={currentPath} />
           <NavItem href="/settings" label="Settings" currentPath={currentPath} />
         </nav>
 
@@ -58,7 +60,7 @@ function AppShell({ currentPath, children }: { currentPath: string; children: Re
           <span className="status-orb status-orb--amber" aria-hidden="true" />
           <div>
             <span className="rail-footer__label">Local only</span>
-            <span className="rail-footer__detail">Native lifecycle · Phase 0B</span>
+            <span className="rail-footer__detail">Native terminal · Phase 0C</span>
           </div>
         </div>
       </aside>
@@ -68,7 +70,7 @@ function AppShell({ currentPath, children }: { currentPath: string; children: Re
           <div className="topbar__context">
             <span className="topbar__path">/ personal-assistant</span>
             <span className="topbar__separator" aria-hidden="true">/</span>
-            <span className="topbar__current">{currentPath === "/settings" ? "settings" : "overview"}</span>
+            <span className="topbar__current">{currentPath === "/settings" ? "settings" : currentPath === "/agents/personal" ? "personal agent" : "overview"}</span>
           </div>
           <div className="topbar__status">
             <span className="status-orb status-orb--green" aria-hidden="true" />
@@ -89,7 +91,7 @@ function OverviewPage() {
         <h1 id="overview-title">A quiet place to see what is configured.</h1>
         <p>
           Settings and native agent lifecycle now share one effective configuration boundary. Terminal
-          output and activity surfaces follow in the next slices.
+          output is available in the personal agent workspace; activity surfaces follow in the next slices.
         </p>
         <a className="button button--primary" href="/settings">Open settings <span aria-hidden="true">↗</span></a>
       </section>
@@ -117,6 +119,8 @@ export function App() {
     content = <OverviewPage />;
   } else if (currentPath === "/settings") {
     content = <SettingsPage />;
+  } else if (currentPath === "/agents/personal") {
+    content = <PersonalAgentPage />;
   }
 
   return <AppShell currentPath={currentPath}>{content}</AppShell>;

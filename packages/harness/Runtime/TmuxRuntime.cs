@@ -27,6 +27,8 @@ public sealed record TmuxHealth(
     string? Error,
     bool RepairEligible = false);
 
+public sealed record TmuxPaneSnapshot(string Data, int ScrollbackLines);
+
 public sealed class ProcessTmuxCommandExecutor(string executable = "tmux") : ITmuxCommandExecutor
 {
     public TmuxCommandResult Execute(IReadOnlyList<string> arguments)
@@ -227,6 +229,46 @@ public sealed class TmuxSessionManager
         EnsureSuccess(result, "Unable to launch the native runtime in tmux.");
     }
 
+    public TmuxPaneSnapshot CapturePane(string name, int scrollbackLines)
+    {
+        ValidateSessionName(name);
+        if (scrollbackLines is < 1 or > 100000)
+        {
+            throw new AgentConfigurationException("The terminal scrollback bound is outside the supported range.");
+        }
+
+        var result = executor.Execute([
+            "capture-pane",
+            "-p",
+            "-t",
+            $"{name}:0.0",
+            "-S",
+            $"-{scrollbackLines.ToString(CultureInfo.InvariantCulture)}"
+        ]);
+        EnsureSuccess(result, "Unable to capture the tmux pane.");
+        return new TmuxPaneSnapshot(result.StandardOutput, scrollbackLines);
+    }
+
+    public void StartPanePipe(string name, string sinkPath)
+    {
+        ValidateSessionName(name);
+        var normalizedSinkPath = ValidateSinkPath(sinkPath);
+        var result = executor.Execute([
+            "pipe-pane",
+            "-t",
+            $"{name}:0.0",
+            TmuxPipeCommandBuilder.Build(normalizedSinkPath)
+        ]);
+        EnsureSuccess(result, "Unable to start the tmux output pipe.");
+    }
+
+    public void StopPanePipe(string name)
+    {
+        ValidateSessionName(name);
+        var result = executor.Execute(["pipe-pane", "-t", $"{name}:0.0"]);
+        EnsureSuccess(result, "Unable to stop the tmux output pipe.");
+    }
+
     public void StopSession(string name)
     {
         ValidateSessionName(name);
@@ -333,6 +375,16 @@ public sealed class TmuxSessionManager
         }
     }
 
+    private static string ValidateSinkPath(string sinkPath)
+    {
+        if (!Path.IsPathRooted(sinkPath) || sinkPath.Contains('\0') || sinkPath.Contains('\r') || sinkPath.Contains('\n'))
+        {
+            throw new AgentConfigurationException("The tmux output sink must be an absolute safe path.");
+        }
+
+        return Path.GetFullPath(sinkPath);
+    }
+
     private void ValidateSessionName(string name)
     {
         AgentRegistry.ValidateSessionName(name);
@@ -371,6 +423,20 @@ public sealed class TmuxSessionManager
         {
             throw new TmuxOperationException("agent_runtime_unavailable", message);
         }
+    }
+}
+
+public static class TmuxPipeCommandBuilder
+{
+    public static string Build(string sinkPath)
+    {
+        if (!Path.IsPathRooted(sinkPath) || sinkPath.Contains('\0') || sinkPath.Contains('\r') || sinkPath.Contains('\n'))
+        {
+            throw new AgentConfigurationException("The tmux output sink must be an absolute safe path.");
+        }
+
+        var quotedPath = sinkPath.Replace("'", "'\\''", StringComparison.Ordinal);
+        return $"exec /usr/bin/tee -a '{quotedPath}'";
     }
 }
 

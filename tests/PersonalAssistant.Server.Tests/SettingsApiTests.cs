@@ -100,6 +100,19 @@ public sealed class SettingsApiTests
         Assert.Equal("invalid_request", body.GetProperty("code").GetString());
     }
 
+    [Fact]
+    public async Task Unknown_api_route_returns_not_found_instead_of_dashboard_shell()
+    {
+        using var factory = new SettingsApiFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/unknown");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("<html", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static JsonElement FindSetting(JsonElement snapshot, string key) =>
         snapshot.GetProperty("settings").EnumerateArray().Single(item => item.GetProperty("key").GetString() == key);
 }

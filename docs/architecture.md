@@ -1,8 +1,8 @@
 # Architecture brief
 
 This document is the current planning and implementation baseline for the
-Personal Assistant Harness. Phase 0A settings is implemented but awaiting
-review; native runtime and external integrations remain deferred.
+Personal Assistant Harness. Phase 0A settings is implemented and reviewed;
+native runtime and external integrations remain deferred.
 
 ## 1. Core principle
 

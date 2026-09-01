@@ -1,4 +1,5 @@
 using PersonalAssistant.Harness;
+using PersonalAssistant.Harness.Settings;
 using PersonalAssistant.Server.Endpoints;
 using Microsoft.Extensions.FileProviders;
 
@@ -14,8 +15,8 @@ var bootstrapEnvironment = new Dictionary<string, string?>(StringComparer.Ordina
 };
 var harnessRuntime = HarnessRuntime.Create(repositoryRoot, bootstrapEnvironment, repositoryRoot);
 
-builder.Services.AddSingleton(harnessRuntime);
-builder.Services.AddSingleton(harnessRuntime.Settings);
+builder.Services.AddSingleton<HarnessRuntime>(_ => harnessRuntime);
+builder.Services.AddSingleton<SettingsService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().Settings);
 builder.Services.AddProblemDetails();
 builder.WebHost.UseUrls($"http://{harnessRuntime.Bootstrap.ServerHost}:{harnessRuntime.Bootstrap.ServerPort}");
 
@@ -33,6 +34,11 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 if (Directory.Exists(dashboardRoot))
 {
     var dashboardIndex = Path.Combine(dashboardRoot, "index.html");
+    app.MapFallback("/api/{**path}", context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return Task.CompletedTask;
+    });
     app.MapFallback(async context =>
     {
         context.Response.ContentType = "text/html; charset=utf-8";

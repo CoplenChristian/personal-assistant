@@ -179,6 +179,35 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public void Patch_to_default_without_override_is_a_no_op()
+    {
+        using var context = new SettingsTestContext();
+        var snapshot = context.CreateService().ApplyChanges([Change("appearance.theme", "system")]);
+
+        var theme = snapshot.Settings.Single(item => item.Key == "appearance.theme");
+        Assert.Equal("system", theme.Value);
+        Assert.False(theme.HasOverride);
+        Assert.Empty(context.Store.ReadGlobalOverrides());
+        Assert.Empty(context.Store.ReadActivityEvents());
+    }
+
+    [Fact]
+    public void Patch_to_default_without_override_preserves_unrelated_overrides()
+    {
+        using var context = new SettingsTestContext();
+        var service = context.CreateService();
+
+        service.ApplyChanges([Change("agents.defaults.autoStart", true)]);
+        var snapshot = service.ApplyChanges([Change("appearance.theme", "system")]);
+
+        Assert.Equal("system", snapshot.Settings.Single(item => item.Key == "appearance.theme").Value);
+        Assert.True((bool)snapshot.Settings.Single(item => item.Key == "agents.defaults.autoStart").Value!);
+        Assert.Single(context.Store.ReadGlobalOverrides());
+        Assert.Equal("agents.defaults.autoStart", context.Store.ReadGlobalOverrides().Keys.Single());
+        Assert.Single(context.Store.ReadActivityEvents());
+    }
+
+    [Fact]
     public void Setting_equal_to_baseline_removes_existing_override()
     {
         using var context = new SettingsTestContext();

@@ -1,7 +1,7 @@
 # Phase 0A — Settings and configuration
 
-Spec version: 1
-Status: implementation complete; review complete
+Spec version: 1.1
+Status: implementation complete; 0A.1 corrective revision in progress
 Architecture baseline: v1 at commit 13930c5
 Stack: React/Vite dashboard plus C#/.NET ASP.NET Core backend
 
@@ -124,10 +124,13 @@ Boot order:
 3. build the typed registry and baseline values;
 4. open personal-assistant.sqlite under the resolved runtime directory;
 5. load/validate global override rows;
-6. compose the API snapshot; and
-7. start ASP.NET Core on the validated host/port.
+6. compose and validate the complete effective snapshot once;
+7. construct the host with the validated bootstrap values; and
+8. start ASP.NET Core on the validated host/port.
 
-Malformed bootstrap, defaults, policies, or persisted overrides fail closed.
+Malformed bootstrap, defaults, policies, or persisted overrides fail closed
+before the ASP.NET host starts. Startup validation is not deferred until the
+first API request.
 
 ## Repository defaults
 
@@ -312,8 +315,10 @@ The server rejects unknown, unsupported-scope, immutable, bootstrap, safety,
 sensitive, malformed, wrongly typed, and invalid cross-field changes before
 any write. The candidate effective snapshot must be valid before the
 transaction commits. A value equal to its baseline default deletes its
-override. Successful changed operations return the complete effective snapshot
-and append settings.updated.
+override. If the requested effective values and persisted override rows are
+already unchanged, the operation is a no-op: it performs no settings-row write
+and appends no success activity event. Successful changed operations return the
+complete effective snapshot and append settings.updated.
 
 DELETE removes an editable global override and returns the complete effective
 snapshot. Reset is idempotent when no override exists. It never writes defaults.
@@ -378,8 +383,8 @@ JSONL, private-key markers, obvious access tokens, and .NET bin/obj/TestResults
 or coverage output. Tracked templates remain allowed.
 
 The check uses no network or LLM. Personal documents remain in an external
-vault. No package lock or node_modules artifact is required for the dashboard
-proof.
+vault. The dashboard commits package-lock.json for reproducible dependency
+resolution; node_modules remains ignored and is never committed.
 
 ## Proof and definition of done
 
@@ -389,14 +394,17 @@ Backend/API proof must cover defaults, override persistence, reset, unknown and
 invalid values, cross-field rotation thresholds, atomic batches, locked
 safety/bootstrap values, sensitive definitions, future-scope rejection,
 restart metadata, settings.updated transaction behavior, malformed persisted
-rows, unchanged YAML/manifests/templates, and ProblemDetails responses.
+rows, startup rejection of invalid persisted/effective configuration, an
+already-default no-op PATCH with no rows/events, unchanged
+YAML/manifests/templates, API 404 behavior for unknown /api routes, and
+ProblemDetails responses.
 
 Frontend/browser proof must cover /settings loading/error/retry, metadata-driven
 editing, dirty/save/reset, server validation failure, restart indicators,
 locked fields, honest integration cards, keyboard/accessibility behavior,
 responsive layout, and the ASP.NET-hosted route.
 
-Phase 0A is done when:
+Phase 0A.1 is done when:
 
 1. React/Vite and ASP.NET Core/.NET implement this contract;
 2. the C# registry is the only settings metadata source;
@@ -405,6 +413,8 @@ Phase 0A is done when:
 5. API, UI, reset, validation, and activity behavior work end-to-end;
 6. privacy and providerless tests pass;
 7. applicable .NET and dashboard checks plus browser proof pass; and
-8. no 0B–0E, integration, native-runtime, or model-API work enters the diff.
+8. the committed dashboard lockfile reproduces the declared dependency graph;
+9. no 0B–0E, integration, native-runtime, or model-API work enters the diff.
 
-After review findings are fixed, freeze Phase 0A and write the Phase 0B spec.
+After the corrective review is complete, freeze Phase 0A.1 and use the revised
+Phase 0B spec as the next implementation boundary.

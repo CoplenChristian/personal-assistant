@@ -123,7 +123,9 @@ public sealed class SettingsService
         registry.ValidateCandidate(candidate, context);
         var changesToStore = desiredOverrides
             .Where(pair => touched.Any(definition => string.Equals(definition.Key, pair.Key, StringComparison.Ordinal)))
-            .Where(pair => !existingOverrides.TryGetValue(pair.Key, out var current) || !string.Equals(current, pair.Value, StringComparison.Ordinal))
+            .Where(pair => existingOverrides.TryGetValue(pair.Key, out var current)
+                ? !string.Equals(current, pair.Value, StringComparison.Ordinal)
+                : pair.Value is not null)
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
         if (changesToStore.Count == 0)
@@ -131,9 +133,12 @@ public sealed class SettingsService
             return BuildSnapshot(candidate, defaults, existingOverrides.Keys.ToHashSet(StringComparer.Ordinal));
         }
 
+        var changedDefinitions = touched
+            .Where(definition => changesToStore.ContainsKey(definition.Key))
+            .ToArray();
         var activity = ActivityEvent.SettingsUpdated(
             changesToStore.Keys.ToArray(),
-            touched.Any(definition => definition.RequiresRestart),
+            changedDefinitions.Any(definition => definition.RequiresRestart),
             "patch");
         store.ApplyAtomic(changesToStore, activity);
         return GetSnapshot();

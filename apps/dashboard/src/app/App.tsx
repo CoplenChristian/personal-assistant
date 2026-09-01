@@ -71,7 +71,7 @@ function AppShell({ currentPath, children }: { currentPath: string; children: Re
           </div>
           <div className="topbar__status">
             <span className="status-orb status-orb--green" aria-hidden="true" />
-            <span>Loopback boundary</span>
+            <span>Configured host</span>
           </div>
         </header>
         <main id="main-content" className="app-main">{children}</main>

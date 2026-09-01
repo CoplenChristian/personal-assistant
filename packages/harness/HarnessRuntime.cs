@@ -35,8 +35,17 @@ public sealed class HarnessRuntime : IDisposable
         var context = new SettingsContext(root, bootstrap, defaults, policies);
         var databasePath = Path.Combine(bootstrap.RuntimeDirectory, "personal-assistant.sqlite");
         var store = new SqliteSettingsOverrideStore(databasePath);
-        var service = new SettingsService(SettingsRegistry.CreateDefault(), context, store);
-        return new HarnessRuntime(service, store, bootstrap);
+        try
+        {
+            var service = new SettingsService(SettingsRegistry.CreateDefault(), context, store);
+            _ = service.GetSnapshot();
+            return new HarnessRuntime(service, store, bootstrap);
+        }
+        catch
+        {
+            store.Dispose();
+            throw;
+        }
     }
 
     public void Dispose() => store.Dispose();

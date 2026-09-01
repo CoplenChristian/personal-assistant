@@ -180,11 +180,11 @@ hardening rather than a prerequisite for normal integration use.
 
 ## Workspace checks
 
-The current npm lifecycle scripts validate only the scaffold until actual
 The repository-level checks cover the .NET solution, React dashboard, and
 privacy boundary:
 
 ~~~sh
+npm --prefix apps/dashboard ci
 dotnet build PersonalAssistant.sln
 dotnet test PersonalAssistant.sln
 npm --prefix apps/dashboard run build

@@ -312,6 +312,7 @@ public sealed class TmuxSessionManager
         var result = executor.Execute([
             "capture-pane",
             "-p",
+            "-J",
             "-t",
             $"{name}:0.0",
             "-S",

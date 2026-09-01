@@ -17,7 +17,7 @@ public sealed class TmuxTerminalStreamTests
         Assert.Equal("backlog\n", snapshot.Data);
         Assert.Equal(5000, snapshot.ScrollbackLines);
         Assert.Equal(
-            ["capture-pane", "-p", "-t", "test-pa-personal:0.0", "-S", "-5000"],
+            ["capture-pane", "-p", "-J", "-t", "test-pa-personal:0.0", "-S", "-5000"],
             executor.Commands.Single());
     }
 

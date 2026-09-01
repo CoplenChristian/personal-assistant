@@ -93,7 +93,9 @@ Mode lifecycles.
 introduced; the terminal remains the only interactive input boundary.
 The terminal renderer also enables xterm line-ending conversion so tmux's
 line-oriented capture/stream data starts each row at the correct column; the
-renderer regression assertion covers this setting.
+renderer regression assertion covers this setting. Hydration also joins
+tmux soft-wrapped rows with `capture-pane -J` before xterm reflows them to the
+browser width.
 
 ## Artifact: Hosted browser proof
 

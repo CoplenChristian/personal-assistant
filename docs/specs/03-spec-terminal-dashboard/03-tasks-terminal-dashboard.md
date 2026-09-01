@@ -1,6 +1,6 @@
 # 03-tasks-terminal-dashboard.md
 
-Status: T1-T2 complete; T3-T4 pending
+Status: T1-T2 complete; T2 corrective alignment complete; T3-T4 pending
 Spec: [03-spec-terminal-dashboard.md](03-spec-terminal-dashboard.md)
 Planning mode: planning audit passed; implementation may begin through the SDD workflow.
 
@@ -36,7 +36,7 @@ scheduling, skills, integrations, memory search, or multi-user access.
 
 | File | Why It Is Relevant |
 | --- | --- |
-| `packages/harness/Runtime/TmuxRuntime.cs` | Existing safe tmux argument and process-health boundary to extend with capture, pipe, resize, and literal input operations. |
+| `packages/harness/Runtime/TmuxRuntime.cs` | Existing safe tmux argument and process-health boundary to extend with capture, pipe, and literal input operations. |
 | `packages/harness/Runtime/ClaudeRuntimeAdapter.cs` | Existing native Claude lifecycle adapter to extend with compact, clear, and rotate operations. |
 | `packages/harness/Agents/AgentSessionService.cs` | Existing personal-agent lifecycle and desired/observed state authority. |
 | `packages/harness/Persistence/SqliteHarnessDatabase.cs` | Shared SQLite connection, transaction, migration, and activity boundary. |
@@ -51,24 +51,24 @@ scheduling, skills, integrations, memory search, or multi-user access.
 | `apps/server/Endpoints/ActivityEndpoints.cs` | Planned versioned activity feed/counter route mapping. |
 | `apps/server/Contracts/TerminalContracts.cs` | Planned terminal frame, state, error, and hygiene response contracts. |
 | `apps/server/Contracts/ActivityContracts.cs` | Planned activity feed, counter, date, timezone, and event response contracts. |
-| `tests/PersonalAssistant.Harness.Tests/Runtime/TmuxTerminalStreamTests.cs` | Planned providerless tmux capture/pipe/resize/input command and stream tests. |
+| `tests/PersonalAssistant.Harness.Tests/Runtime/TmuxTerminalStreamTests.cs` | Planned providerless tmux capture/pipe/input command and stream tests. |
 | `tests/PersonalAssistant.Harness.Tests/Runtime/TerminalInputSerializerTests.cs` | Planned FIFO, queue, acknowledgement, size, cancellation, and failure tests. |
 | `tests/PersonalAssistant.Harness.Tests/Runtime/SessionHygieneServiceTests.cs` | Planned checkpoint ordering, failure blocking, retry, and adapter action tests. |
 | `tests/PersonalAssistant.Harness.Tests/Activity/ActivityQueryServiceTests.cs` | Planned local-day aggregation and privacy/redaction tests. |
 | `tests/PersonalAssistant.Server.Tests/TerminalApiTests.cs` | Planned WebSocket/API hydration, stream, input, reconnect, and hygiene tests. |
 | `tests/PersonalAssistant.Server.Tests/ActivityApiTests.cs` | Planned versioned activity API and no-fake-event tests. |
-| `apps/dashboard/package.json` | Frontend dependency/scripts source; add only the pinned xterm packages required by the spec. |
+| `apps/dashboard/package.json` | Frontend dependency/scripts source for the standardized terminal surface. |
 | `apps/dashboard/package-lock.json` | Reproducible frontend dependency graph updated through `npm ci`/lockfile workflow. |
 | `apps/dashboard/src/app/App.tsx` | Existing navigation/overview link to the personal terminal workspace. |
 | `apps/dashboard/src/api/agentsApi.ts` | Existing agent API client to extend or pair with terminal/activity clients. |
 | `apps/dashboard/src/api/terminalApi.ts` | Planned WebSocket URL/protocol and hygiene request client. |
 | `apps/dashboard/src/api/activityApi.ts` | Planned activity feed/counter client. |
 | `apps/dashboard/src/features/agents/PersonalAgentPage.tsx` | Planned `/agents/personal` workspace composition. |
-| `apps/dashboard/src/features/agents/TerminalSurface.tsx` | Planned xterm.js lifecycle, hydration, output, input, resize, and reconnect behavior. |
+| `apps/dashboard/src/features/agents/StandardizedTerminalSurface.tsx` | Canonical screen rendering, fixed geometry, input submission, and reconnect behavior. |
 | `apps/dashboard/src/features/agents/ActivityPanel.tsx` | Planned local-day counters, feed, zero states, and failure/blocked display. |
 | `apps/dashboard/src/features/agents/terminalProtocol.ts` | Planned client frame validation, sequence tracking, and state mapping. |
 | `apps/dashboard/tests/PersonalAgentPage.test.tsx` | Planned hosted-surface composition and action-state tests. |
-| `apps/dashboard/tests/TerminalSurface.test.tsx` | Planned mocked WebSocket/xterm hydration, stream, input, reconnect, and cleanup tests. |
+| `apps/dashboard/tests/StandardizedTerminalSurface.test.tsx` | Mocked WebSocket canonical-screen, input, reconnect, and cleanup tests. |
 | `apps/dashboard/tests/ActivityPanel.test.tsx` | Planned counters/feed/zero-state/privacy presentation tests. |
 | `apps/dashboard/src/styles.css` | Existing visual system and responsive layout extended for terminal/activity surfaces. |
 | `scripts/privacy-check.sh` | Required deterministic staged/runtime privacy gate. |
@@ -86,19 +86,19 @@ scheduling, skills, integrations, memory search, or multi-user access.
 
 ## Tasks
 
-### [x] 1.0 Terminal hydration and continuous output
+### [x] 1.0 Terminal hydration and canonical screen updates
 
 #### 1.0 Proof Artifact(s)
 
 - Test: C# tmux-boundary tests capture the exact bounded `capture-pane`
-  argument vector and demonstrate that ongoing output uses one pipe/stream
-  bridge rather than repeated full-pane polling.
+  argument vector and demonstrate that a pipe change signal produces one
+  coalesced canonical screen capture rather than raw output forwarding or
+  timer-based full-pane polling.
 - Test: providerless WebSocket integration tests demonstrate `hello` →
-  snapshot → output ordering, monotonic sequences, reconnect hydration, and
-  bounded slow-client behavior.
-- Test: React/Vitest tests demonstrate xterm receives snapshot data before live
-  output and replaces a disconnected stream on reconnect without duplicating
-  terminal content.
+  hydration screen → canonical screen update ordering, monotonic sequences,
+  reconnect hydration, and bounded slow-client behavior.
+- Test: React/Vitest tests demonstrate canonical screen replacement and
+  reconnect without duplicating or retaining old screen content.
 - Screenshot: hosted ASP.NET dashboard at `/agents/personal` shows the
   deterministic terminal workspace, hydration boundary, connection state, and
   no private transcript or provider credential.
@@ -107,33 +107,33 @@ scheduling, skills, integrations, memory search, or multi-user access.
 
 #### 1.0 Tasks
 
-- [x] 1.1 Define the versioned terminal protocol models for `hello`, `snapshot`,
-  `output`, `state`, `inputAck`, and `error`, including sequence rules,
+- [x] 1.1 Define the versioned terminal protocol models for `hello`, `screen`,
+  `state`, `inputAck`, and `error`, including sequence rules,
   payload-size limits, hydration boundary metadata, and stable error codes.
   Test artifact: C# contract tests reject unknown frame types, invalid versions,
   oversized payloads, and non-monotonic output sequences.
-- [x] 1.2 Extend the tmux boundary with typed capture-pane and stream operations:
-  bounded `capture-pane -p` hydration, one harness-owned pipe/stream bridge per
-  logical session, observer reference counting, and deterministic stream
+- [x] 1.2 Extend the tmux boundary with typed capture-pane and change-signal
+  operations: bounded `capture-pane -p` hydration, one harness-owned pipe
+  bridge per logical session, observer reference counting, and deterministic
   teardown that never kills the Claude session. Test artifact: fake executor
-  assertions prove exact argument vectors, no whole-pane polling, one shared
+  assertions prove exact argument vectors, no raw output forwarding, one shared
   pipe, and cleanup after the final observer.
-- [x] 1.3 Implement bounded per-observer output buffers and monotonic stream
-  sequence assignment, including slow-client close/error behavior and
+- [x] 1.3 Implement bounded per-observer change-signal buffers and monotonic
+  screen sequence assignment, including slow-client close/error behavior and
   cancellation when a request disconnects. Test artifact: providerless stream
   tests prove backpressure behavior, no unbounded queue, and no leaked worker or
   pipe after cancellation.
 - [x] 1.4 Add ASP.NET WebSocket middleware/endpoint composition with same-origin
   validation, personal-agent/session health checks, async socket lifetime,
-  hello/snapshot ordering, output forwarding, and reconnect-specific fresh
-  hydration. Test artifact: server WebSocket tests cover healthy, missing,
-  unhealthy, rejected-origin, disconnect, and reconnect cases.
+  hello/hydration-screen ordering, coalesced screen updates, and reconnect-
+  specific fresh hydration. Test artifact: server WebSocket tests cover
+  healthy, missing, unhealthy, rejected-origin, disconnect, and reconnect cases.
 - [x] 1.5 Add the `/agents/personal` React route and link it from the overview;
-  install/pin `@xterm/xterm` and the smallest required fit/accessibility addons,
-  then implement terminal mount, snapshot write, output write, hydration
-  marker, connection status, and cleanup-safe reconnect behavior. Test artifact:
-  Vitest tests with mocked WebSocket/xterm prove snapshot-before-output and
-  Strict Mode cleanup; hosted browser screenshot proves the visible workspace.
+  implement fixed-geometry canonical screen rendering, hydration marker,
+  connection status, and cleanup-safe reconnect behavior. Test artifact:
+  Vitest tests with mocked WebSocket prove screen replacement, fixed line
+  boundaries, and Strict Mode cleanup; hosted browser screenshot proves the
+  visible workspace.
 
 ### [x] 2.0 Serialized input and explicit terminal state
 
@@ -146,12 +146,12 @@ scheduling, skills, integrations, memory search, or multi-user access.
   full-queue errors without mutating the native session or logging input text.
 - Test: terminal state tests demonstrate `idle`, `busy`, `waiting`, and
   `error`, including the explicit waiting-signal rule and healthy-idle default.
-- Test: React/Vitest tests demonstrate keyboard input, resize validation,
-  acknowledgements, visible state labels, reconnect cleanup, and Strict Mode
-  socket cleanup.
+- Test: React/Vitest tests demonstrate keyboard input, boundary-level
+  acknowledgements, fixed screen geometry, visible state labels, reconnect
+  cleanup, and Strict Mode socket cleanup.
 - Screenshot: hosted browser proof shows keyboard-ready terminal controls,
-  state labels, resize behavior, and no prompt composer outside the terminal
-  boundary.
+  fixed screen geometry, boundary-acceptance wording, and no prompt composer
+  outside the terminal boundary.
 - Check: the full repository quality command set and privacy check pass.
 
 #### 2.0 Tasks
@@ -161,24 +161,31 @@ scheduling, skills, integrations, memory search, or multi-user access.
   rejection codes, and input acknowledgements. Test artifact: interleaving,
   overflow, cancellation, and failure-injection tests prove ordering and no
   silent drops.
-- [x] 2.2 Add typed literal-input and resize operations to the tmux boundary;
-  use argument arrays and validated positive column/row bounds, and keep input
-  separate from model/API prompt abstractions. Test artifact: fake executor
-  tests prove `send-keys -l`/resize argument shape, control-sequence handling,
+- [x] 2.2 Add typed literal-input operations to the tmux boundary; use argument
+  arrays and keep input separate from model/API prompt abstractions. Terminal
+  geometry remains fixed and has no tmux resize operation. Test artifact: fake
+  executor tests prove `send-keys -l` argument shape, control-sequence handling,
   and absence of `sh -c` or model-generated shell text.
 - [x] 2.3 Add server frame validation and deterministic terminal state tracking:
   healthy-idle default, busy during queued/in-flight/recent input activity,
   explicit waiting event, error on stream/input/runtime failure, and state
   frames to observers. Test artifact: state-transition and WebSocket tests
   cover all four states and invalid frame/session cases.
-- [x] 2.4 Connect xterm `onData`, resize/fitting, acknowledgement, reconnect,
-  close cleanup, and accessible state announcements to the protocol. Test
-  artifact: React tests prove FIFO-facing client behavior, visible labels,
-  responsive controls, no stop on unmount, and Strict Mode setup/cleanup.
-- [x] 2.5 Exercise keyboard, resize, reconnect, error, and browser-close paths
-  against the hosted dashboard using a deterministic fake session fixture.
+- [x] 2.4 Connect canonical screen replacement, input submission and boundary
+  acknowledgement, reconnect, close cleanup, and accessible state
+  announcements to the protocol. Test artifact: React tests prove FIFO-facing
+  client behavior, fixed line boundaries, visible labels, responsive controls,
+  no stop on unmount, and Strict Mode setup/cleanup.
+- [x] 2.5 Exercise keyboard, fixed-geometry, reconnect, error, and browser-close
+  paths against the hosted dashboard using a deterministic fake session fixture.
   Proof artifact: browser trace/screenshot and server log show only observer
   disconnect on browser close, with no lifecycle stop request.
+- [x] 2.6 Align T2 with the canonical screen transport: keep the terminal
+  geometry fixed, remove resize frames and tmux resize operations, and define
+  `inputAck` as harness/tmux-boundary acceptance only. Test artifact: protocol,
+  server, and dashboard tests prove resize is not a supported client operation,
+  canonical screen updates replace the prior screen, and the UI never claims
+  that Claude consumed or processed input.
 
 ### [ ] 3.0 Checkpoint-gated session hygiene and terminal logs
 

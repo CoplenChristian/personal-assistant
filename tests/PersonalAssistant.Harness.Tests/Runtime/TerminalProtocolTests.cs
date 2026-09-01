@@ -37,21 +37,30 @@ public sealed class TerminalProtocolTests
     }
 
     [Fact]
-    public void Output_sequence_must_increase()
+    public void Screen_sequence_must_increase()
     {
         var exception = Assert.Throws<TerminalProtocolException>(() =>
-            TerminalProtocolValidator.ValidateOutputSequence(4, 4));
+            TerminalProtocolValidator.ValidateScreenSequence(4, 4));
 
         Assert.Equal("sequence_not_monotonic", exception.Code);
     }
 
     [Fact]
-    public void Valid_client_frames_are_typed_and_resize_is_bounded()
+    public void Valid_client_frames_are_typed_without_a_resize_operation()
     {
         var input = TerminalProtocolValidator.ParseClientFrame("{\"type\":\"input\",\"sequence\":3,\"data\":\"hello\"}");
-        var resize = TerminalProtocolValidator.ParseClientFrame("{\"type\":\"resize\",\"columns\":120,\"rows\":36}");
+        var ping = TerminalProtocolValidator.ParseClientFrame("{\"type\":\"ping\",\"sequence\":4}");
 
         Assert.Equal(new TerminalInputFrame(3, "hello"), input);
-        Assert.Equal(new TerminalResizeFrame(120, 36), resize);
+        Assert.Equal(new TerminalPingFrame(4), ping);
+    }
+
+    [Fact]
+    public void Resize_frames_are_rejected_because_terminal_geometry_is_fixed()
+    {
+        var exception = Assert.Throws<TerminalProtocolException>(() =>
+            TerminalProtocolValidator.ParseClientFrame("{\"type\":\"resize\",\"columns\":120,\"rows\":36}"));
+
+        Assert.Equal("unknown_frame_type", exception.Code);
     }
 }

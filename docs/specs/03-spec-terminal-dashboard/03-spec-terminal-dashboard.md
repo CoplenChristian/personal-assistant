@@ -1,6 +1,6 @@
 # 03-spec-terminal-dashboard.md
 
-Status: approved for implementation
+Status: approved for implementation; T2 transport amendment recorded
 Depends on: Phase 0B frozen at commit c75bd56
 Stack: React/Vite dashboard, C#/.NET ASP.NET Core backend, SQLite, tmux
 
@@ -8,9 +8,10 @@ Stack: React/Vite dashboard, C#/.NET ASP.NET Core backend, SQLite, tmux
 
 Phase 0C turns the Phase 0B lifecycle card into a real terminal workspace for
 the one configured personal Claude agent. It hydrates the existing tmux pane
-with `capture-pane`, streams subsequent pane output without repeatedly polling
-the whole pane, delivers user input through a per-agent serializer, and adds
-checkpoint-gated session hygiene plus the first useful activity feed.
+with `capture-pane`, uses a harness-owned pipe as a change signal for
+coalesced canonical screen captures, delivers user input through a per-agent
+serializer, and adds checkpoint-gated session hygiene plus the first useful
+activity feed.
 
 The harness remains the control plane and native Claude remains the runtime.
 The browser connects to the harness; it does not become a second terminal
@@ -21,8 +22,9 @@ the observation stream but does not stop or mutate the native agent session.
 
 - Provide one reliable `/agents/personal` terminal workspace that shows the
   actual personal tmux session, including existing scrollback on connection.
-- Deliver terminal output continuously through a bounded WebSocket stream backed
-  by tmux output piping, with reconnect-safe hydration and no full-pane polling.
+- Deliver bounded canonical screen updates through a WebSocket. `pipe-pane` is
+  used only as a harness-owned change signal; each coalesced update is a fresh
+  bounded screen capture, not raw VT/output streaming or timer-based polling.
 - Serialize all browser input per logical agent so input arrives in order and
   never becomes a shell-built command.
 - Make compact, clear, and hard-rotate actions checkpoint-gated, observable,
@@ -50,10 +52,11 @@ the observation stream but does not stop or mutate the native agent session.
 
 ## Demoable Units of Work
 
-### Unit 1: Terminal hydration and continuous output
+### Unit 1: Terminal hydration and canonical screen updates
 
 **Purpose:** Give the owner a live view of the existing personal Claude tmux
-session with a deterministic initial snapshot followed by incremental output.
+session with a deterministic initial screen followed by coalesced canonical
+screen replacements.
 
 **Functional Requirements:**
 
@@ -68,25 +71,28 @@ session with a deterministic initial snapshot followed by incremental output.
   ProblemDetails before accepting the socket.
 - On a successful connection, the server shall verify the process-aware Phase
   0B session health, run tmux `capture-pane` with an explicit scrollback bound,
-  and send a snapshot frame before forwarding live output.
+  and send a hydration `screen` frame before any live screen update.
 - The capture bound shall use the effective session/browser scrollback setting
   and shall not read native Claude private storage.
 - After hydration, the server shall use tmux `pipe-pane` or an equivalent
-  harness-owned streaming bridge for ongoing output. It shall not repeatedly
-  capture and diff the complete pane as its stream mechanism.
+  harness-owned bridge only as a change signal. A short coalescing window shall
+  drain a burst of signals, capture the current bounded pane once, normalize
+  its line endings, and send one complete `screen` frame. Raw pipe bytes shall
+  never be sent to the browser, and a timer shall not poll the complete pane.
 - The stream bridge shall be scoped to the logical personal session, support
   multiple browser observers without creating multiple tmux pipes, and stop
   its pipe when the final observer disconnects. Stopping the pipe shall never
   stop or respawn the native Claude process.
-- Every output frame shall carry a monotonically increasing stream sequence and
-  the server shall mark the hydration boundary so the client can avoid treating
-  the snapshot as a newly generated response.
-- The client shall render the snapshot and subsequent VT/text data in
-  `@xterm/xterm`, fit the terminal to its container, and preserve the existing
-  scrollback setting. It shall not render a fabricated transcript or maintain a
-  second conversation history.
-- A reconnect shall receive a fresh snapshot and a new stream boundary. The
-  server is not required to replay output emitted while the browser was
+- Every `screen` frame shall carry a monotonically increasing screen sequence
+  and the server shall mark the hydration boundary so the client can replace
+  its current screen without treating hydration as new activity.
+- The client shall render the normalized screen as a fixed-geometry plain-text
+  viewport. It shall preserve line boundaries, allow horizontal scrolling for
+  long native lines, and report content dimensions for information only; it
+  shall not fit or resize the tmux pane, interpret VT data, render a fabricated
+  transcript, or maintain a second conversation history.
+- A reconnect shall receive a fresh hydration screen and a new stream boundary.
+  The server is not required to replay changes signaled while the browser was
   disconnected.
 - A slow WebSocket client shall not cause an unbounded process-memory queue;
   the server shall apply a bounded per-observer buffer and close a client that
@@ -97,12 +103,12 @@ session with a deterministic initial snapshot followed by incremental output.
 - **C# integration tests:** fake tmux command assertions demonstrate bounded
   `capture-pane` hydration followed by one streaming bridge, not full-pane
   polling.
-- **WebSocket test:** a providerless fake session demonstrates snapshot-before-
-  output ordering, sequence values, reconnect hydration, and bounded-client
-  failure behavior.
-- **React test:** a mocked WebSocket and terminal adapter demonstrate that
-  snapshot data and live frames render in order and that reconnect replaces the
-  old stream without duplicating output.
+- **WebSocket test:** a providerless fake session demonstrates hydration before
+  canonical screen updates, coalesced sequence values, reconnect hydration,
+  and bounded-client failure behavior.
+- **React test:** a mocked WebSocket demonstrates that canonical screen frames
+  replace the prior screen, keep long lines unwrapped, and reconnect without
+  duplicating or retaining old screen content.
 - **Hosted browser screenshot:** the ASP.NET-served `/agents/personal` page
   shows a real-looking terminal surface populated by the deterministic fake
   session fixture, with no provider credentials or live personal transcript.
@@ -126,9 +132,15 @@ the per-agent ordering and state boundaries established by the architecture.
   and an explicit behavior when the agent is missing, unhealthy, or the queue
   is full. Rejected input shall not be silently dropped and shall not be
   written into activity metadata.
-- Resize messages shall be validated as positive bounded column/row values and
-  shall use a typed tmux resize operation. A resize shall not change the
-  logical agent or native process lifecycle.
+- The terminal geometry shall be fixed by the harness/runtime boundary. The
+  client protocol shall not expose a resize frame, the browser shall not send
+  resize events, and no terminal action in this slice shall invoke tmux
+  `resize-pane`. Reported screen dimensions are informational content
+  dimensions only.
+- An `inputAck` shall mean that the harness accepted the frame and its
+  serialized tmux input operation completed successfully. It shall not claim
+  that Claude received, displayed, interpreted, or acted on the input; the
+  harness has no receipt/processing acknowledgement in this slice.
 - The server shall expose an explicit terminal activity state separate from the
   Phase 0B session observed state. The supported states are `idle`, `busy`,
   `waiting`, and `error`.
@@ -155,8 +167,9 @@ the per-agent ordering and state boundaries established by the architecture.
   failed session.
 - **API/WebSocket proof:** invalid session and full-queue cases return stable
   errors without mutating the tmux session or activity log with private input.
-- **Browser proof:** keyboard focus, terminal resize, state labels, reconnect,
-  and browser-close behavior are exercised on the hosted local dashboard.
+- **Browser proof:** keyboard focus, fixed screen geometry, input acceptance
+  wording, state labels, reconnect, and browser-close behavior are exercised
+  on the hosted local dashboard.
 
 ### Unit 3: Checkpoint-gated session hygiene and terminal logs
 
@@ -292,9 +305,10 @@ The primary route is `/agents/personal`, linked from the existing overview.
 It contains:
 
 - a compact identity/state header using the Phase 0B status contract;
-- a large xterm.js terminal surface with a visible hydration boundary;
+- a large canonical screen surface with a visible hydration boundary;
 - connection, reconnect, and stream-error status;
-- input/resize behavior owned by the WebSocket controller;
+- fixed terminal geometry with input submission owned by the WebSocket
+  controller;
 - compact, clear, rotate, and checkpoint feedback controls; and
 - an activity summary/feed panel that can be collapsed on narrow screens.
 
@@ -313,17 +327,17 @@ changing controls must have specific labels and status text.
 
 ### WebSocket protocol
 
-The first protocol version is `phase-0c-terminal.v1`. The server owns the
-connection and the native session; the client owns only its rendered terminal
-buffer and local connection state.
+The standardized protocol version is `phase-0c-terminal.standardized.v1`. The
+server owns the connection and the native session; the client owns only its
+rendered canonical screen and local connection state.
 
 Server-to-client frames are typed JSON envelopes except for terminal payloads,
 which may use a documented text/binary frame variant:
 
 ~~~json
-{ "type": "hello", "protocol": "phase-0c-terminal.v1", "agentId": "personal" }
-{ "type": "snapshot", "sequence": 0, "data": "...", "scrollbackLines": 5000 }
-{ "type": "output", "sequence": 1, "data": "..." }
+{ "type": "hello", "protocol": "phase-0c-terminal.standardized.v1", "agentId": "personal" }
+{ "type": "screen", "sequence": 0, "data": "...", "columns": 80, "rows": 24, "hydrationBoundary": true }
+{ "type": "screen", "sequence": 1, "data": "...", "columns": 80, "rows": 24, "hydrationBoundary": false }
 { "type": "state", "state": "idle" }
 { "type": "inputAck", "sequence": 12 }
 { "type": "error", "code": "terminal_stream_unavailable" }
@@ -333,14 +347,18 @@ Client-to-server frames are:
 
 ~~~json
 { "type": "input", "sequence": 12, "data": "..." }
-{ "type": "resize", "columns": 120, "rows": 36 }
 { "type": "ping", "sequence": 13 }
 ~~~
 
 The implementation shall validate protocol version, frame type, sequence,
-payload size, dimensions, and agent binding. It shall not echo input text into
-activity metadata. A reconnect gets a new `hello` and `snapshot` rather than
-assuming the client retained a correct buffer.
+payload size, and agent binding. It shall reject a `resize` frame as an
+unsupported operation because terminal geometry is fixed. Screen `columns` and
+`rows` describe the normalized content in that frame; they are informational
+and are not a pane-resize contract. An `inputAck` confirms harness/tmux-boundary
+acceptance only; it is not evidence that Claude received or processed the
+input. The server shall not echo input text into activity metadata. A
+reconnect gets a new `hello` and hydration `screen` rather than assuming the
+client retained a correct buffer.
 
 ASP.NET Core shall enable WebSockets before the endpoint that accepts the
 connection, keep the request pipeline alive until the socket loop completes,
@@ -355,7 +373,7 @@ single god object:
 
 ~~~text
 packages/harness/Runtime/
-  TmuxTerminalStream.cs       capture/pipe/resize/literal-input boundary
+  TmuxTerminalStream.cs       capture/pipe/literal-input boundary
   TerminalInputSerializer.cs  per-agent FIFO and backpressure
   SessionHygieneService.cs    checkpoint/compact/clear/rotate orchestration
 
@@ -370,19 +388,20 @@ apps/server/
 
 apps/dashboard/src/features/agents/
   PersonalAgentPage.tsx
-  TerminalSurface.tsx
+  StandardizedTerminalSurface.tsx
   ActivityPanel.tsx
   terminalProtocol.ts
 ~~~
 
 The existing `TmuxSessionManager` remains the only process-argument boundary.
 Every tmux invocation uses `ProcessStartInfo.ArgumentList`. `capture-pane`,
-`pipe-pane`, `resize-pane`, literal input, and stream teardown receive typed
-arguments. If tmux's `pipe-pane` requires a shell-command sink, that sink must
-be a fixed harness-owned helper and the command must be constructed by a
-dedicated platform-safe utility; no model, browser, transcript, or external
-content may contribute command text. Tests must assert the exact safe command
-shape.
+`pipe-pane`, literal input, and stream teardown receive typed arguments. The
+standardized screen path uses `pipe-pane` only as a change signal and performs
+one coalesced `capture-pane` after a burst; it does not forward raw pipe bytes.
+If tmux's `pipe-pane` requires a shell-command sink, that sink must be a fixed
+harness-owned helper and the command must be constructed by a dedicated
+platform-safe utility; no model, browser, transcript, or external content may
+contribute command text. Tests must assert the exact safe command shape.
 
 The WebSocket observer owns no tmux session. Phase 0B desired/observed state
 and provenance-based health remain authoritative. A missing/dead/known-wrong
@@ -407,11 +426,10 @@ documentation:
   The spec uses `capture-pane` for existing content and `pipe-pane` or a
   fixed equivalent for changes; it treats dead panes explicitly and keeps the
   stream helper harness-owned.
-- **xterm.js:** [xterm.js official repository and API guidance](https://github.com/xtermjs/xterm.js/).
-  The spec uses the current `@xterm/xterm` package, keeps terminal output in a
-  real terminal component rather than a text transcript, uses fit/accessibility
-  support where appropriate, and avoids experimental addons unless their
-  version is pinned and their behavior is covered by tests.
+- **Canonical screen rendering:** the standardized surface intentionally uses
+  a fixed plain-text viewport rather than xterm.js. This keeps tmux's already
+  materialized screen geometry and line boundaries stable across browsers; the
+  browser does not reinterpret VT sequences or send pane resize events.
 - **React:** [React `useEffect` reference](https://react.dev/reference/react/useEffect)
   and [Synchronizing with Effects](https://react.dev/learn/synchronizing-with-effects).
   The terminal/WebSocket effect must return cleanup that closes the observer,
@@ -422,15 +440,16 @@ documentation:
   proofs, then serves the generated static bundle from ASP.NET Core.
 - **WebSocket browser behavior:** [MDN WebSocket `close` event](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close_event).
   The client treats close as a connection-state transition, reports why the
-  observer ended, and reconnects through a fresh snapshot rather than assuming
+  observer ended, and reconnects through a fresh canonical screen rather than assuming
   that a missed stream can be reconstructed locally.
 
 ### Testing and proof strategy
 
 All tests must run without Anthropic/OpenAI credentials, personal documents,
 Keychain access, or a live personal transcript. The harness shall provide fake
-tmux/runtime seams that can produce deterministic pane snapshots, output,
-input acknowledgements, state changes, checkpoint outcomes, and failures.
+tmux/runtime seams that can produce deterministic pane snapshots, change
+signals, canonical screen updates, input acknowledgements, state changes,
+checkpoint outcomes, and failures.
 
 Required checks:
 
@@ -476,11 +495,11 @@ transcript or screenshot in the repository.
 - Keep the WebSocket protocol versioned and same-origin by default. Use
   cancellation tokens, asynchronous socket I/O, keep-alive, bounded buffers,
   and deterministic close/error codes.
-- Use current `@xterm/xterm` plus the smallest pinned addons needed for fitting,
-  links, or accessibility. Do not use the attach addon as an unexamined input
-  transport because this slice requires the harness serializer and explicit
-  input acknowledgements.
-- Hydration and stream data must be treated as terminal bytes/VT data, not
+- Render normalized screen data as plain text with preserved line boundaries;
+  do not add a terminal emulator, fit addon, or browser-driven pane resize to
+  this slice. The input textarea and explicit WebSocket input frames remain
+  separate from screen rendering.
+- Hydration and canonical screen data must be treated as terminal content, not
   parsed as model instructions. External content rendered in the terminal
   remains untrusted.
 - The stream bridge must be observable and disposable per logical session. It
@@ -527,12 +546,12 @@ transcript or screenshot in the repository.
 
 ## Success Metrics
 
-1. **Hydration and streaming:** 100% of providerless WebSocket integration
-   tests observe a snapshot before live output, and no production stream path
-   performs repeated whole-pane polling.
+1. **Hydration and screen updates:** 100% of providerless WebSocket integration
+   tests observe hydration before a canonical screen update, and no production
+   path uses timer-based whole-pane polling or forwards raw pipe bytes.
 2. **Input correctness:** 100% of accepted input frames arrive at the fake tmux
-   boundary in sequence, with explicit acknowledgements and zero shell-built
-   command strings in command-capture tests.
+   boundary in sequence, with explicit boundary acknowledgements, no Claude
+   receipt claim, and zero shell-built command strings in command-capture tests.
 3. **Hygiene safety:** every successful compact/clear/rotate proof records a
    successful checkpoint first; every injected checkpoint failure proves zero
    native-session mutation afterward.

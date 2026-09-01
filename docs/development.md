@@ -1,8 +1,10 @@
 # Development notes
 
-Phase 0A settings/configuration is implemented and reviewed. Phase 0B now
-covers one native Claude lifecycle; terminal streaming and external
-integrations remain deferred.
+Phase 0A settings/configuration and Phase 0B lifecycle are implemented and
+reviewed. Phase 0C T1/T2 now covers the fixed-geometry canonical terminal
+screen, coalesced observation, serialized input, and explicit terminal state;
+session hygiene, activity aggregation, and external integrations remain
+deferred.
 
 ## Local prerequisites
 

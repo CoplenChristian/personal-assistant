@@ -77,21 +77,6 @@ public sealed class TmuxTerminalStreamTests
     }
 
     [Fact]
-    public void Resize_uses_bounded_typed_dimensions()
-    {
-        var executor = new FakeTmuxExecutor();
-        var manager = new TmuxSessionManager("test-pa-", executor, new NoopProcessInspector());
-
-        manager.ResizePane("test-pa-personal", 120, 36);
-
-        Assert.Equal(
-            ["resize-pane", "-t", "test-pa-personal:0.0", "-x", "120", "-y", "36"],
-            executor.Commands.Last());
-        Assert.Throws<AgentConfigurationException>(() => manager.ResizePane("test-pa-personal", 0, 36));
-        Assert.Throws<AgentConfigurationException>(() => manager.ResizePane("test-pa-personal", 120, TerminalProtocol.MaxRows + 1));
-    }
-
-    [Fact]
     public async Task Stream_publishes_data_appended_after_the_pipe_is_ready()
     {
         var runtimeDirectory = Directory.CreateTempSubdirectory("personal-assistant-terminal-").FullName;

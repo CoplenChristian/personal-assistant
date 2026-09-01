@@ -500,7 +500,7 @@ a:focus-visible {
 
 .standardized-terminal__controls textarea {
   width: 100%;
-  resize: vertical;
+  resize: none;
   min-height: 50px;
   padding: 11px 12px;
   border: 1px solid var(--line-strong);

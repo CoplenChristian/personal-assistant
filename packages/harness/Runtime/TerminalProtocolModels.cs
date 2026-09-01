@@ -7,8 +7,6 @@ public static class TerminalProtocol
 {
     public const string ContractVersion = "phase-0c-terminal.standardized.v1";
     public const int MaxPayloadBytes = 64 * 1024;
-    public const int MaxColumns = 500;
-    public const int MaxRows = 250;
 }
 
 public interface ITerminalClientFrame
@@ -19,11 +17,6 @@ public interface ITerminalClientFrame
 public sealed record TerminalInputFrame(long Sequence, string Data) : ITerminalClientFrame
 {
     public string Type => "input";
-}
-
-public sealed record TerminalResizeFrame(int Columns, int Rows) : ITerminalClientFrame
-{
-    public string Type => "resize";
 }
 
 public sealed record TerminalPingFrame(long Sequence) : ITerminalClientFrame
@@ -88,7 +81,6 @@ public static class TerminalProtocolValidator
             return type switch
             {
                 "input" => ParseInput(root),
-                "resize" => ParseResize(root),
                 "ping" => ParsePing(root),
                 _ => throw Invalid("unknown_frame_type", "The terminal frame type is not supported.")
             };
@@ -116,11 +108,11 @@ public static class TerminalProtocolValidator
         }
     }
 
-    public static void ValidateOutputSequence(long previousSequence, long nextSequence)
+    public static void ValidateScreenSequence(long previousSequence, long nextSequence)
     {
         if (nextSequence <= previousSequence)
         {
-            throw Invalid("sequence_not_monotonic", "Terminal output sequence numbers must increase.");
+            throw Invalid("sequence_not_monotonic", "Terminal screen sequence numbers must increase.");
         }
     }
 
@@ -132,29 +124,12 @@ public static class TerminalProtocolValidator
         }
     }
 
-    public static void ValidateResize(TerminalResizeFrame frame)
-    {
-        if (frame.Columns is < 1 or > TerminalProtocol.MaxColumns || frame.Rows is < 1 or > TerminalProtocol.MaxRows)
-        {
-            throw Invalid("resize_invalid", "Terminal dimensions are outside the supported bounds.");
-        }
-    }
-
     private static TerminalInputFrame ParseInput(JsonElement root)
     {
         var sequence = ReadInt64(root, "sequence");
         var data = ReadString(root, "data");
         ValidatePayload(data);
         return new TerminalInputFrame(sequence, data);
-    }
-
-    private static TerminalResizeFrame ParseResize(JsonElement root)
-    {
-        var frame = new TerminalResizeFrame(
-            ReadInt32(root, "columns"),
-            ReadInt32(root, "rows"));
-        ValidateResize(frame);
-        return frame;
     }
 
     private static TerminalPingFrame ParsePing(JsonElement root) =>
@@ -175,16 +150,6 @@ public static class TerminalProtocolValidator
         if (!root.TryGetProperty(propertyName, out var property) || !property.TryGetInt64(out var value) || value < 0)
         {
             throw Invalid("invalid_frame", $"Terminal frame property {propertyName} must be a non-negative integer.");
-        }
-
-        return value;
-    }
-
-    private static int ReadInt32(JsonElement root, string propertyName)
-    {
-        if (!root.TryGetProperty(propertyName, out var property) || !property.TryGetInt32(out var value))
-        {
-            throw Invalid("invalid_frame", $"Terminal frame property {propertyName} must be an integer.");
         }
 
         return value;

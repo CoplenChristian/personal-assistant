@@ -1,9 +1,11 @@
 # Architecture brief
 
 This document is the current planning and implementation baseline for the
-Personal Assistant Harness. Phase 0A settings is implemented and reviewed;
-Phase 0B covers one native Claude lifecycle; terminal streaming and external
-integrations remain deferred.
+Personal Assistant Harness. Phase 0A settings and Phase 0B lifecycle are
+implemented and reviewed. Phase 0C T1/T2 covers the fixed-geometry canonical
+terminal screen, coalesced observation, serialized input, and explicit state;
+session hygiene, activity aggregation, and external integrations remain
+deferred.
 
 ## 1. Core principle
 
@@ -305,19 +307,24 @@ Clear and hard rotation must checkpoint first:
 
 ## 5. Terminal stream and input model
 
-The dashboard should render the actual native CLI stream.
+The dashboard should render a standardized view of the actual native CLI
+session.
 
 - Use tmux capture-pane for initial/backlog hydration where appropriate.
-- Prefer tmux pipe-pane or an equivalent streaming mechanism for ongoing output
-  rather than repeatedly polling and diffing the entire pane.
+- Use tmux pipe-pane or an equivalent harness-owned change signal, then send
+  coalesced normalized capture-pane screen frames rather than raw output or
+  timer-based full-pane polling.
 - Rotate terminal logs independently; logs are not durable assistant memory.
 - Serialize injected input per agent.
 - Never construct shell commands from model-generated text; use argument arrays.
 - Track explicit states such as idle, busy, waiting, and error before scheduler
   or agent-to-agent injection becomes active.
+- Keep terminal geometry fixed. The client has no resize frame, and an
+  `inputAck` only confirms harness/tmux-boundary acceptance, not Claude receipt
+  or processing.
 
-The dashboard can use xterm.js for rendering and WebSockets for transport while
-the native CLI remains the source of the terminal conversation.
+The dashboard uses a plain-text canonical screen over WebSockets while the
+native CLI remains the source of the terminal conversation.
 
 ## 6. Capability broker and realms
 
@@ -545,7 +552,7 @@ See docs/threat-model.md for the local-trust model and its non-guarantees.
 | Host | macOS |
 | Backend | C# / .NET ASP.NET Core |
 | UI | React + Vite + TypeScript |
-| Terminal | xterm.js |
+| Terminal | Fixed plain-text canonical screen |
 | Transport | localhost HTTP + WebSocket; Unix socket for broker |
 | Persistence | SQLite + FTS5 |
 | Agent persistence | tmux |

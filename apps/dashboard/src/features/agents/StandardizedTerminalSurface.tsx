@@ -125,7 +125,7 @@ export function StandardizedTerminalSurface({ scrollbackLines }: StandardizedTer
         }
 
         if (frame.type === "inputAck") {
-          setDelivery(`Input ${frame.sequence} delivered.`);
+          setDelivery(`Input ${frame.sequence} accepted by harness.`);
           return;
         }
 
@@ -191,7 +191,7 @@ export function StandardizedTerminalSurface({ scrollbackLines }: StandardizedTer
       <div className="terminal-workspace__meta">
         <span>{hydrated ? "Hydrated screen" : "Waiting for screen"}</span>
         <span className="terminal-workspace__state" role="status" aria-live="polite">State: {activityLabel(activityState)}</span>
-        <span>{screenDimensions.columns > 0 ? `${screenDimensions.columns} × ${screenDimensions.rows}` : `${scrollbackLines.toLocaleString()} lines`}</span>
+        <span>{screenDimensions.columns > 0 ? `Fixed viewport · ${screenDimensions.columns} × ${screenDimensions.rows}` : `Fixed viewport · ${scrollbackLines.toLocaleString()} lines`}</span>
       </div>
       <pre className="standardized-terminal__screen" ref={screenElement} aria-label="Personal Claude terminal screen" role="log" aria-live="polite">
         {screenData || "Waiting for the canonical screen snapshot…"}

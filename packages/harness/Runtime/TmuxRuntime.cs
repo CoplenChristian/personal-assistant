@@ -369,49 +369,6 @@ public sealed class TmuxSessionManager
         EnsureSuccess(result, "Unable to deliver literal input to the tmux pane.");
     }
 
-    public void ResizePane(string name, int columns, int rows)
-    {
-        ValidateSessionName(name);
-        ValidateDimensions(columns, rows);
-        if (!HasSession(name))
-        {
-            throw new TmuxOperationException("agent_session_missing", "The tmux session does not exist.");
-        }
-
-        var result = executor.Execute([
-            "resize-pane",
-            "-t",
-            $"{name}:0.0",
-            "-x",
-            columns.ToString(CultureInfo.InvariantCulture),
-            "-y",
-            rows.ToString(CultureInfo.InvariantCulture)
-        ]);
-        EnsureSuccess(result, "Unable to resize the tmux pane.");
-    }
-
-    public async Task ResizePaneAsync(string name, int columns, int rows, CancellationToken cancellationToken = default)
-    {
-        ValidateSessionName(name);
-        ValidateDimensions(columns, rows);
-        var session = await ExecuteAsync(["has-session", "-t", name], cancellationToken);
-        if (session.ExitCode != 0)
-        {
-            throw new TmuxOperationException("agent_session_missing", "The tmux session does not exist.");
-        }
-
-        var result = await ExecuteAsync([
-            "resize-pane",
-            "-t",
-            $"{name}:0.0",
-            "-x",
-            columns.ToString(CultureInfo.InvariantCulture),
-            "-y",
-            rows.ToString(CultureInfo.InvariantCulture)
-        ], cancellationToken);
-        EnsureSuccess(result, "Unable to resize the tmux pane.");
-    }
-
     public void StopSession(string name)
     {
         ValidateSessionName(name);
@@ -538,14 +495,6 @@ public sealed class TmuxSessionManager
         if (Encoding.UTF8.GetByteCount(data) > TerminalProtocol.MaxPayloadBytes)
         {
             throw new AgentConfigurationException("Literal terminal input exceeds the supported payload limit.");
-        }
-    }
-
-    private static void ValidateDimensions(int columns, int rows)
-    {
-        if (columns is < 1 or > TerminalProtocol.MaxColumns || rows is < 1 or > TerminalProtocol.MaxRows)
-        {
-            throw new AgentConfigurationException("Terminal dimensions are outside the supported bounds.");
         }
     }
 

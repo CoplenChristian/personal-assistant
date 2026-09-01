@@ -41,7 +41,7 @@ Audit run: 2 (after sub-task generation)
 | Spec requirement group | Implementation task mapping | Planned test/proof mapping |
 | --- | --- | --- |
 | Terminal route, capture hydration, pipe streaming, sequencing, reconnect, backpressure | 1.1–1.5 | Contract, tmux, stream, WebSocket, React, and hosted screenshot proof |
-| FIFO input, literal tmux args, resize, idle/busy/waiting/error, observer cleanup | 2.1–2.5 | Serializer, state, API/WebSocket, React, browser trace/screenshot proof |
+| FIFO input, literal tmux args, fixed geometry, idle/busy/waiting/error, observer cleanup | 2.1–2.6 | Serializer, state, API/WebSocket, React, browser trace/screenshot proof |
 | Checkpoint ordering, compact/clear/rotate, log warning/rotation/retention | 3.1–3.5 | Checkpoint, failure-injection, log, API, React, hosted screenshot proof |
 | Activity categories, timezone buckets, redaction, zero states, feed UI | 4.1–4.5 | Aggregation, privacy, API, React, and hosted screenshot proof |
 
@@ -64,3 +64,13 @@ Audit run: 2 (after sub-task generation)
 - Inconsistency resolution: no unsupported requirement or vague proof artifact
   remains; non-blocking implementation assumptions stay inside the spec.
 - Final synthesis: planning is ready for the Phase 3 implementation handoff.
+
+## T2 Transport Amendment
+
+The implementation review changed the terminal transport from direct terminal
+emulation to a canonical screen contract. `pipe-pane` remains a harness-owned
+change signal, while coalesced `capture-pane` results are normalized and sent
+as complete `screen` frames. Terminal geometry is fixed: the client protocol
+has no resize frame and the harness exposes no resize-pane operation. An
+`inputAck` confirms successful harness/tmux-boundary acceptance only; it does
+not assert that Claude received or processed the input.

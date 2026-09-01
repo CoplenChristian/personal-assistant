@@ -63,7 +63,6 @@ public static class TerminalEndpoints
         var terminalStream = context.RequestServices.GetRequiredService<TmuxTerminalStream>();
         var terminalInput = context.RequestServices.GetRequiredService<TerminalInputSerializer>();
         var terminalState = context.RequestServices.GetRequiredService<TerminalActivityStateTracker>();
-        var tmux = context.RequestServices.GetRequiredService<TmuxSessionManager>();
         var settings = context.RequestServices.GetRequiredService<SettingsService>();
         var scrollbackLines = ReadScrollbackLines(settings);
         terminalState.ResetForHealthySession(terminalInput.QueuedCount > 0 || terminalInput.HasInFlightOperation);
@@ -97,7 +96,6 @@ public static class TerminalEndpoints
                 sendLock,
                 cancellation.Token,
                 agents,
-                tmux,
                 terminalInput,
                 terminalState);
             var completedTask = await Task.WhenAny(sendTask, stateTask, receiveTask);
@@ -217,7 +215,6 @@ public static class TerminalEndpoints
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken,
         IAgentSessionService agents,
-        TmuxSessionManager tmux,
         TerminalInputSerializer terminalInput,
         TerminalActivityStateTracker terminalState)
     {
@@ -267,10 +264,6 @@ public static class TerminalEndpoints
                     else if (frame is TerminalInputFrame input)
                     {
                         await HandleInputAsync(socket, sendLock, cancellationToken, agents, terminalInput, terminalState, input);
-                    }
-                    else if (frame is TerminalResizeFrame resize)
-                    {
-                        await HandleResizeAsync(socket, sendLock, cancellationToken, agents, tmux, terminalState, resize);
                     }
                     else
                     {
@@ -342,51 +335,6 @@ public static class TerminalEndpoints
             }
 
             throw;
-        }
-    }
-
-    private static async Task HandleResizeAsync(
-        WebSocket socket,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken,
-        IAgentSessionService agents,
-        TmuxSessionManager tmux,
-        TerminalActivityStateTracker terminalState,
-        TerminalResizeFrame resize)
-    {
-        if (!TryGetHealthyAgent(agents, out var status, out var errorCode, out var errorDetail))
-        {
-            terminalState.MarkError();
-            await SendJsonAsync(socket, new TerminalErrorFrame(errorCode, errorDetail), sendLock, cancellationToken);
-            return;
-        }
-
-        try
-        {
-            await tmux.ResizePaneAsync(status.Session.TmuxSessionName, resize.Columns, resize.Rows, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (AgentLifecycleException exception)
-        {
-            terminalState.MarkError();
-            await SendJsonAsync(socket, new TerminalErrorFrame(exception.Code, exception.Message), sendLock, cancellationToken);
-        }
-        catch (TmuxUnavailableException)
-        {
-            terminalState.MarkError();
-            await SendJsonAsync(
-                socket,
-                new TerminalErrorFrame("terminal_resize_unavailable", "The tmux resize boundary is unavailable."),
-                sendLock,
-                cancellationToken);
-        }
-        catch (AgentConfigurationException exception)
-        {
-            terminalState.MarkError();
-            await SendJsonAsync(socket, new TerminalErrorFrame("terminal_resize_invalid", exception.Message), sendLock, cancellationToken);
         }
     }
 

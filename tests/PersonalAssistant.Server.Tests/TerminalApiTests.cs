@@ -50,12 +50,13 @@ public sealed class TerminalApiTests
         Assert.Equal("state", initialState.RootElement.GetProperty("type").GetString());
         Assert.Equal("idle", initialState.RootElement.GetProperty("state").GetString());
 
+        factory.Executor.CaptureOutput = "fixture updated\r\n";
         File.AppendAllText(factory.Executor.SinkPath, "fixture output\r\n");
         using var update = await ReceiveJsonAsync(socket);
         Assert.Equal("screen", update.RootElement.GetProperty("type").GetString());
         Assert.Equal(1, update.RootElement.GetProperty("sequence").GetInt64());
         Assert.False(update.RootElement.GetProperty("hydrationBoundary").GetBoolean());
-        Assert.Equal("fixture snapshot", update.RootElement.GetProperty("data").GetString());
+        Assert.Equal("fixture updated", update.RootElement.GetProperty("data").GetString());
 
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
     }
@@ -172,7 +173,7 @@ public sealed class TerminalApiTests
     }
 
     [Fact]
-    public async Task Websocket_resizes_the_healthy_pane_with_typed_dimensions()
+    public async Task Websocket_rejects_resize_frames_without_touching_tmux()
     {
         using var factory = new TerminalApiFactory();
         var socketClient = factory.Server.CreateWebSocketClient();
@@ -181,39 +182,23 @@ public sealed class TerminalApiTests
 
         var resize = JsonSerializer.Serialize(new { type = "resize", columns = 120, rows = 36 });
         await socket.SendAsync(Encoding.UTF8.GetBytes(resize), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
-        await WaitForAsync(() => factory.Executor.Commands.Any(command => command[0] == "resize-pane"));
-
-        var resizeCommand = factory.Executor.Commands.Last(command => command[0] == "resize-pane");
-        Assert.Equal(["resize-pane", "-t", "test-pa-personal:0.0", "-x", "120", "-y", "36"], resizeCommand);
-        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
-    }
-
-    [Fact]
-    public async Task Websocket_reports_resize_unavailability_as_a_stable_error_and_state()
-    {
-        using var factory = new TerminalApiFactory(resizeUnavailable: true);
-        var socketClient = factory.Server.CreateWebSocketClient();
-        using var socket = await socketClient.ConnectAsync(new Uri("ws://localhost/ws/agents/personal/terminal"), CancellationToken.None);
-        await ReceiveInitialFramesAsync(socket);
-
-        var resize = JsonSerializer.Serialize(new { type = "resize", columns = 120, rows = 36 });
-        await socket.SendAsync(Encoding.UTF8.GetBytes(resize), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
-        var responseTypes = new List<string>();
-        var responseCodes = new List<string>();
+        var frameTypes = new List<string>();
+        var errorCodes = new List<string>();
         for (var index = 0; index < 2; index++)
         {
             using var response = await ReceiveJsonAsync(socket);
-            responseTypes.Add(response.RootElement.GetProperty("type").GetString()!);
-            if (response.RootElement.GetProperty("type").GetString() == "error")
+            var type = response.RootElement.GetProperty("type").GetString()!;
+            frameTypes.Add(type);
+            if (type == "error")
             {
-                responseCodes.Add(response.RootElement.GetProperty("code").GetString()!);
+                errorCodes.Add(response.RootElement.GetProperty("code").GetString()!);
             }
         }
 
-        Assert.Contains("state", responseTypes);
-        Assert.Contains("error", responseTypes);
-        Assert.Contains("terminal_resize_unavailable", responseCodes);
-        Assert.Equal(TerminalActivityState.Error.ToString().ToLowerInvariant(), factory.TerminalState.Current.ToWireValue());
+        Assert.Contains("state", frameTypes);
+        Assert.Contains("error", frameTypes);
+        Assert.Contains("unknown_frame_type", errorCodes);
+        Assert.DoesNotContain(factory.Executor.Commands, command => command[0] == "resize-pane");
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "test complete", CancellationToken.None);
     }
 
@@ -295,10 +280,10 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
 
     public List<TerminalInputRequest> DeliveredInputs { get; } = [];
 
-    public TerminalApiFactory(bool healthy = true, string? captureOutput = null, bool resizeUnavailable = false)
+    public TerminalApiFactory(bool healthy = true, string? captureOutput = null)
     {
         this.healthy = healthy;
-        executor = new FakeTerminalExecutor(runtimeDirectory, captureOutput, resizeUnavailable);
+        executor = new FakeTerminalExecutor(runtimeDirectory, captureOutput);
         tmux = new TmuxSessionManager("test-pa-", executor, new NoopProcessInspector());
         terminalStream = new TmuxTerminalStream(tmux, runtimeDirectory);
         terminalInput = new TerminalInputSerializer(
@@ -373,11 +358,10 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
         throw new InvalidOperationException("Unable to find repository root for terminal API tests.");
     }
 
-    public sealed class FakeTerminalExecutor(string runtimeDirectory, string? captureOutput = null, bool resizeUnavailable = false) : ITmuxCommandExecutor
+    public sealed class FakeTerminalExecutor(string runtimeDirectory, string? captureOutput = null) : ITmuxCommandExecutor
     {
         public string SinkPath { get; } = Path.Combine(runtimeDirectory, "terminal-streams", "test-pa-personal.log");
-        private string CaptureOutput { get; } = captureOutput ?? "fixture snapshot\r\n";
-        private bool ResizeUnavailable { get; } = resizeUnavailable;
+        public string CaptureOutput { get; set; } = captureOutput ?? "fixture snapshot\r\n";
         public List<IReadOnlyList<string>> Commands { get; } = [];
         public int CaptureCount => Volatile.Read(ref captureCount);
         public int PipeStartCount => Volatile.Read(ref pipeStartCount);
@@ -406,11 +390,6 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
                 {
                     Interlocked.Increment(ref pipeStopCount);
                 }
-            }
-
-            if (arguments[0] == "resize-pane" && ResizeUnavailable)
-            {
-                throw new TmuxUnavailableException("test tmux unavailable");
             }
 
             return new TmuxCommandResult(0, string.Empty, string.Empty);

@@ -57,7 +57,7 @@ describe("StandardizedTerminalSurface", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders canonical screen frames and reports input delivery", async () => {
+  it("renders canonical screen frames and reports harness input acceptance", async () => {
     render(<StandardizedTerminalSurface scrollbackLines={5000} />);
     const socket = FakeWebSocket.instances[0]!;
     actOpen(socket);
@@ -67,14 +67,14 @@ describe("StandardizedTerminalSurface", () => {
 
     expect(await screen.findByText("canonical screen")).toBeInTheDocument();
     expect(screen.getByText("State: Idle")).toBeInTheDocument();
-    expect(screen.getByText("80 × 24")).toBeInTheDocument();
+    expect(screen.getByText("Fixed viewport · 80 × 24")).toBeInTheDocument();
 
     const input = screen.getByLabelText("Standardized terminal input");
     fireEvent.change(input, { target: { value: "list files" } });
     fireEvent.click(screen.getByRole("button", { name: "Send input" }));
     expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: "input", sequence: 1, data: "list files\r" }));
     send(socket, { type: "inputAck", sequence: 1 });
-    expect(await screen.findByText("Input 1 delivered.")).toBeInTheDocument();
+    expect(await screen.findByText("Input 1 accepted by harness.")).toBeInTheDocument();
   });
 
   it("replaces the canonical screen after reconnect without retaining the prior screen", async () => {

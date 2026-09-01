@@ -81,7 +81,8 @@ Scope:
 
 - capture-pane for initial/backlog hydration;
 - pipe-pane or another streaming mechanism for ongoing output;
-- xterm.js/WebSocket terminal rendering;
+- fixed-geometry canonical screen over WebSocket;
+- coalesced capture-pane updates triggered by a harness-owned pipe;
 - explicit idle, busy, waiting, and error states;
 - checkpoint-before-clear/rotation flow;
 - immutable activity feed and local-day counters.
@@ -102,10 +103,13 @@ Initial activity counters/feed:
 
 Acceptance gate:
 
-- [ ] Initial terminal backlog is hydrated with capture-pane.
-- [ ] Ongoing terminal output uses a streaming mechanism rather than full-pane polling/diffing.
-- [ ] Input injection is serialized per agent.
-- [ ] Dashboard exposes idle, busy, waiting, and error states.
+- [x] Initial terminal backlog is hydrated with capture-pane.
+- [x] Ongoing screen updates use a pipe change signal and coalesced capture
+  rather than raw output forwarding or timer-based full-pane polling.
+- [x] Input injection is serialized per agent, with acknowledgements limited to
+  harness/tmux-boundary acceptance.
+- [x] Dashboard exposes idle, busy, waiting, and error states with fixed
+  terminal geometry and no resize operation.
 - [ ] Clear and hard rotation checkpoint before closing context.
 - [ ] Activity events are immutable and visible in a feed/counter surface.
 - [ ] Terminal logs remain separate from durable memory.

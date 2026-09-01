@@ -1,7 +1,7 @@
 # Phase 0B — One Claude agent persisted in tmux
 
 Spec version: 2
-Status: implementation complete; review pending
+Status: implementation complete; review complete
 Depends on: Phase 0A implementation plus the 0A.1 corrective revision
 Architecture baseline: v1 at commit 13930c5
 Stack: C#/.NET ASP.NET Core backend plus React/Vite dashboard

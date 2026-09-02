@@ -7,12 +7,12 @@ public static class ActivityCounterAggregator
         return ActivityCategoryKeys.All.ToDictionary(key => key, _ => 0, StringComparer.Ordinal);
     }
 
-    public static IReadOnlyDictionary<string, int> Aggregate(IReadOnlyList<ActivityEvent> events)
+    public static IReadOnlyDictionary<string, int> Aggregate(IReadOnlyList<ActivityCounterRow> rows)
     {
         var counters = CreateEmptyCounters();
-        foreach (var activityEvent in events)
+        foreach (var row in rows)
         {
-            foreach (var key in MapEventToCounterKeys(activityEvent))
+            foreach (var key in MapRowToCounterKeys(row))
             {
                 counters[key]++;
             }
@@ -21,15 +21,19 @@ public static class ActivityCounterAggregator
         return counters;
     }
 
-    private static IEnumerable<string> MapEventToCounterKeys(ActivityEvent activityEvent)
+    public static IReadOnlyDictionary<string, int> Aggregate(IReadOnlyList<ActivityEvent> events) =>
+        Aggregate(events.Select(static eventRow =>
+            new ActivityCounterRow(eventRow.Category, eventRow.Operation, eventRow.Status)).ToArray());
+
+    private static IEnumerable<string> MapRowToCounterKeys(ActivityCounterRow row)
     {
-        if (string.Equals(activityEvent.Status, "failure", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(activityEvent.Status, "error", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(row.Status, "failure", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(row.Status, "error", StringComparison.OrdinalIgnoreCase))
         {
             yield return ActivityCategoryKeys.Failures;
         }
 
-        switch (activityEvent.Category, activityEvent.Operation)
+        switch (row.Category, row.Operation)
         {
             case ("prompts", "deliver"):
             case ("prompts", "delivered"):

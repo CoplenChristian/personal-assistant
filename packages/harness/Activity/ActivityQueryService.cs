@@ -23,8 +23,8 @@ public sealed class ActivityQueryService
         var localDate = ParseDate(request.Date, timezone);
         var (startUtc, endUtc) = GetDayBounds(localDate, timezone);
         var feedLimit = ClampFeedLimit(request.FeedLimit);
-        var counterEvents = database.ReadActivityEventsBetween(startUtc, endUtc);
-        var counters = ActivityCounterAggregator.Aggregate(counterEvents);
+        var counterRows = database.ReadActivityCounterRowsBetween(startUtc, endUtc);
+        var counters = ActivityCounterAggregator.Aggregate(counterRows);
         var recentEvents = database
             .ReadRecentActivityEventsBetween(startUtc, endUtc, feedLimit)
             .Select(ActivityRedaction.ToPublicEvent)
@@ -36,7 +36,8 @@ public sealed class ActivityQueryService
             timezone.Id,
             counters,
             recentEvents,
-            feedLimit);
+            feedLimit,
+            ActivityTelemetry.RecordingDegraded);
     }
 
     private static TimeZoneInfo ResolveTimezone(string? timezoneId)
@@ -78,16 +79,23 @@ public sealed class ActivityQueryService
 
     private static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) GetDayBounds(DateOnly localDate, TimeZoneInfo timezone)
     {
-        if (localDate >= new DateOnly(9999, 12, 31))
+        if (localDate.Year < 1900 || localDate >= new DateOnly(9999, 12, 31))
         {
             throw new ActivityQueryException("activity_date_invalid", "The requested activity date is out of range.");
         }
 
-        var startLocal = new DateTime(localDate.Year, localDate.Month, localDate.Day, 0, 0, 0, DateTimeKind.Unspecified);
-        var endLocal = startLocal.AddDays(1);
-        var startUtc = new DateTimeOffset(startLocal, timezone.GetUtcOffset(startLocal)).ToUniversalTime();
-        var endUtc = new DateTimeOffset(endLocal, timezone.GetUtcOffset(endLocal)).ToUniversalTime();
-        return (startUtc, endUtc);
+        try
+        {
+            var startLocal = new DateTime(localDate.Year, localDate.Month, localDate.Day, 0, 0, 0, DateTimeKind.Unspecified);
+            var endLocal = startLocal.AddDays(1);
+            var startUtc = new DateTimeOffset(startLocal, timezone.GetUtcOffset(startLocal)).ToUniversalTime();
+            var endUtc = new DateTimeOffset(endLocal, timezone.GetUtcOffset(endLocal)).ToUniversalTime();
+            return (startUtc, endUtc);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            throw new ActivityQueryException("activity_date_invalid", "The requested activity date is out of range.");
+        }
     }
 
     private static int ClampFeedLimit(int? feedLimit)
@@ -114,7 +122,8 @@ public sealed record ActivityQueryResult(
     string Timezone,
     IReadOnlyDictionary<string, int> Counters,
     IReadOnlyList<ActivityPublicEvent> RecentEvents,
-    int FeedLimit);
+    int FeedLimit,
+    bool AuditDegraded);
 
 public sealed class ActivityQueryException(string code, string message) : Exception(message)
 {

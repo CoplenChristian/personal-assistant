@@ -8,7 +8,8 @@ public sealed record ActivityResponse(
     string Timezone,
     IReadOnlyDictionary<string, int> Counters,
     IReadOnlyList<ActivityEventResponse> RecentEvents,
-    int FeedLimit)
+    int FeedLimit,
+    bool AuditDegraded)
 {
     public static ActivityResponse From(ActivityQueryResult result) => new(
         result.ContractVersion,
@@ -16,7 +17,8 @@ public sealed record ActivityResponse(
         result.Timezone,
         result.Counters,
         result.RecentEvents.Select(ActivityEventResponse.From).ToArray(),
-        result.FeedLimit);
+        result.FeedLimit,
+        result.AuditDegraded);
 }
 
 public sealed record ActivityEventResponse(

@@ -43,6 +43,7 @@ export interface ActivitySnapshot {
   counters: ActivityCounters;
   recentEvents: ActivityEventItem[];
   feedLimit: number;
+  auditDegraded: boolean;
 }
 
 export interface ActivityApi {
@@ -143,7 +144,8 @@ function isActivitySnapshot(value: unknown): value is ActivitySnapshot {
     && typeof value.timezone === "string"
     && countersValid
     && eventsValid
-    && typeof value.feedLimit === "number";
+    && typeof value.feedLimit === "number"
+    && typeof value.auditDegraded === "boolean";
 }
 
 async function readJson(response: Response): Promise<unknown> {

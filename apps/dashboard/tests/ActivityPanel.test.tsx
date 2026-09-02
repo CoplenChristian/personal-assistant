@@ -61,6 +61,7 @@ const snapshot: ActivitySnapshot = {
     },
   ],
   feedLimit: 50,
+  auditDegraded: false,
 };
 
 function createMockApi(getActivity: ActivityApi["getActivity"]): ActivityApi {
@@ -119,6 +120,18 @@ describe("ActivityPanel", () => {
 
     expect(await screen.findByText("Local day 2026-09-01 (America/New_York)")).toBeInTheDocument();
     expect(screen.getByText("02:00:00 PM")).toBeInTheDocument();
+  });
+
+  it("surfaces audit degraded warnings from the activity API", async () => {
+    const getActivity = vi.fn(async (): Promise<ActivitySnapshot> => ({
+      ...snapshot,
+      auditDegraded: true,
+    }));
+    render(<ActivityPanel api={createMockApi(getActivity)} />);
+
+    expect(await screen.findByText(
+      "Activity recording is degraded. Recent actions may be missing from this feed.",
+    )).toBeInTheDocument();
   });
 
   it("surfaces load errors with a retry action", async () => {

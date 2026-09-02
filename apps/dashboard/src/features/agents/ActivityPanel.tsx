@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ActivityApiError,
@@ -59,37 +59,40 @@ export function ActivityPanel({ api: providedApi }: ActivityPanelProps) {
   const [snapshot, setSnapshot] = useState<ActivitySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadControllerRef = useRef<AbortController | null>(null);
 
-  const loadActivity = useCallback(async (signal?: AbortSignal) => {
+  const loadActivity = useCallback(async () => {
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    const signal = controller.signal;
+
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getActivity(
-        signal !== undefined ? { signal } : undefined,
-      );
-      if (signal?.aborted) {
+      const result = await api.getActivity({ signal });
+      if (signal.aborted) {
         return;
       }
 
       setSnapshot(result);
     } catch (loadError) {
-      if (signal?.aborted) {
+      if (signal.aborted) {
         return;
       }
 
       setSnapshot(null);
       setError(errorMessage(loadError));
     } finally {
-      if (!signal?.aborted) {
+      if (!signal.aborted) {
         setLoading(false);
       }
     }
   }, [api]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void loadActivity(controller.signal);
-    return () => controller.abort();
+    void loadActivity();
+    return () => loadControllerRef.current?.abort();
   }, [loadActivity]);
 
   const localDayLabel = snapshot
@@ -131,6 +134,12 @@ export function ActivityPanel({ api: providedApi }: ActivityPanelProps) {
 
       {!loading && !error && snapshot && (
         <>
+          {snapshot.auditDegraded && (
+            <div className="activity-panel__audit-warning" role="status">
+              Activity recording is degraded. Recent actions may be missing from this feed.
+            </div>
+          )}
+
           <div className="activity-counters" aria-label="Local-day activity counters">
             {COUNTER_KEYS.map((key) => (
               <div className="activity-counter" key={key}>

@@ -152,9 +152,13 @@ public sealed class ActivityQueryServiceTests
     public void Query_rejects_out_of_range_dates()
     {
         using var fixture = CreateFixture();
-        var exception = Assert.Throws<ActivityQueryException>(() =>
+        var upperBound = Assert.Throws<ActivityQueryException>(() =>
             fixture.Service.Query(new ActivityQueryRequest("9999-12-31", "UTC", null)));
-        Assert.Equal("activity_date_invalid", exception.Code);
+        Assert.Equal("activity_date_invalid", upperBound.Code);
+
+        var lowerBound = Assert.Throws<ActivityQueryException>(() =>
+            fixture.Service.Query(new ActivityQueryRequest("0001-01-01", "Pacific/Auckland", null)));
+        Assert.Equal("activity_date_invalid", lowerBound.Code);
     }
 
     [Fact]

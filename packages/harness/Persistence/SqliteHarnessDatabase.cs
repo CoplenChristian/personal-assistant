@@ -112,6 +112,37 @@ public sealed class SqliteHarnessDatabase : IDisposable
         }
     }
 
+    public IReadOnlyList<ActivityCounterRow> ReadActivityCounterRowsBetween(DateTimeOffset startUtc, DateTimeOffset endUtc)
+    {
+        var startMs = startUtc.ToUnixTimeMilliseconds();
+        var endMs = endUtc.ToUnixTimeMilliseconds();
+        lock (syncRoot)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT category, operation, status
+                FROM activity_events
+                WHERE timestamp_utc_ms IS NOT NULL
+                  AND timestamp_utc_ms >= $start_ms
+                  AND timestamp_utc_ms < $end_ms
+                ORDER BY timestamp_utc_ms ASC, id ASC;
+                """;
+            command.Parameters.AddWithValue("$start_ms", startMs);
+            command.Parameters.AddWithValue("$end_ms", endMs);
+            using var reader = command.ExecuteReader();
+            var rows = new List<ActivityCounterRow>();
+            while (reader.Read())
+            {
+                rows.Add(new ActivityCounterRow(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2)));
+            }
+
+            return rows;
+        }
+    }
+
     public IReadOnlyList<ActivityEvent> ReadActivityEventsBetween(DateTimeOffset startUtc, DateTimeOffset endUtc)
     {
         var startMs = startUtc.ToUnixTimeMilliseconds();
@@ -122,7 +153,9 @@ public sealed class SqliteHarnessDatabase : IDisposable
             command.CommandText = """
                 SELECT id, timestamp, agent_id, realm, category, operation, target, status, duration_ms, metadata_json
                 FROM activity_events
-                WHERE timestamp_utc_ms >= $start_ms AND timestamp_utc_ms < $end_ms
+                WHERE timestamp_utc_ms IS NOT NULL
+                  AND timestamp_utc_ms >= $start_ms
+                  AND timestamp_utc_ms < $end_ms
                 ORDER BY timestamp_utc_ms ASC, id ASC;
                 """;
             command.Parameters.AddWithValue("$start_ms", startMs);
@@ -156,7 +189,9 @@ public sealed class SqliteHarnessDatabase : IDisposable
             command.CommandText = """
                 SELECT id, timestamp, agent_id, realm, category, operation, target, status, duration_ms, metadata_json
                 FROM activity_events
-                WHERE timestamp_utc_ms >= $start_ms AND timestamp_utc_ms < $end_ms
+                WHERE timestamp_utc_ms IS NOT NULL
+                  AND timestamp_utc_ms >= $start_ms
+                  AND timestamp_utc_ms < $end_ms
                 ORDER BY timestamp_utc_ms DESC, id DESC
                 LIMIT $limit;
                 """;
@@ -300,14 +335,18 @@ public sealed class SqliteHarnessDatabase : IDisposable
     {
         lock (syncRoot)
         {
+            using var transaction = connection.BeginTransaction();
             using var check = connection.CreateCommand();
+            check.Transaction = transaction;
             check.CommandText = "SELECT 1 FROM activity_events WHERE timestamp_utc_ms IS NULL LIMIT 1;";
             if (check.ExecuteScalar() is null)
             {
+                transaction.Commit();
                 return;
             }
 
             using var select = connection.CreateCommand();
+            select.Transaction = transaction;
             select.CommandText = "SELECT id, timestamp FROM activity_events WHERE timestamp_utc_ms IS NULL;";
             using var reader = select.ExecuteReader();
             var updates = new List<(string Id, long UtcMs, string UtcTimestamp)>();
@@ -317,9 +356,12 @@ public sealed class SqliteHarnessDatabase : IDisposable
                 updates.Add((reader.GetString(0), utc.ToUnixTimeMilliseconds(), utc.ToString("O")));
             }
 
+            reader.Close();
+
             foreach (var (id, utcMs, utcTimestamp) in updates)
             {
                 using var update = connection.CreateCommand();
+                update.Transaction = transaction;
                 update.CommandText = """
                     UPDATE activity_events
                     SET timestamp_utc_ms = $timestamp_utc_ms,
@@ -331,6 +373,8 @@ public sealed class SqliteHarnessDatabase : IDisposable
                 update.Parameters.AddWithValue("$id", id);
                 update.ExecuteNonQuery();
             }
+
+            transaction.Commit();
         }
     }
 

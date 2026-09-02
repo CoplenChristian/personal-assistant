@@ -740,6 +740,15 @@ a:focus-visible {
   color: var(--red);
 }
 
+.activity-panel__audit-warning {
+  margin: 0 18px 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line));
+  background: color-mix(in srgb, var(--amber) 12%, var(--panel-raised));
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
 .activity-counters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

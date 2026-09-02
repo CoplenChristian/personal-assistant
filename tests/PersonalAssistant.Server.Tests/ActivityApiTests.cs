@@ -15,6 +15,7 @@ public sealed class ActivityApiTests
     [Fact]
     public async Task Get_activity_returns_versioned_json_with_zero_counters_and_no_fake_integration_events()
     {
+        ActivityTelemetry.ResetForTests();
         using var factory = new ActivityApiFactory();
         using var client = factory.CreateClient();
 
@@ -29,11 +30,13 @@ public sealed class ActivityApiTests
         Assert.All(ActivityCategoryKeys.All, key =>
             Assert.Equal(0, body.GetProperty("counters").GetProperty(key).GetInt32()));
         Assert.Empty(body.GetProperty("recentEvents").EnumerateArray());
+        Assert.False(body.GetProperty("auditDegraded").GetBoolean());
     }
 
     [Fact]
     public async Task Get_activity_returns_redacted_recent_events_and_blocked_failure_statuses()
     {
+        ActivityTelemetry.ResetForTests();
         using var factory = new ActivityApiFactory();
         factory.Seed(new ActivityEvent(
             "blocked-hygiene",
@@ -91,8 +94,35 @@ public sealed class ActivityApiTests
     }
 
     [Fact]
+    public async Task Get_activity_reports_audit_degraded_when_recording_has_failed()
+    {
+        ActivityTelemetry.ResetForTests();
+        using var factory = new ActivityApiFactory();
+        using var client = factory.CreateClient();
+
+        ActivityTelemetry.TryRecord(new ThrowingActivitySink(), new ActivityEvent(
+            "lost-event",
+            DateTimeOffset.UtcNow,
+            "personal",
+            "personal",
+            "agents",
+            "start",
+            "runtime-session",
+            "success",
+            null,
+            """{"eventType":"test.event","outcome":"observed"}"""));
+
+        using var response = await client.GetAsync("/api/activity?date=2026-09-01&timezone=UTC");
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(body.GetProperty("auditDegraded").GetBoolean());
+    }
+
+    [Fact]
     public async Task Get_activity_rejects_invalid_query_parameters_with_problem_details()
     {
+        ActivityTelemetry.ResetForTests();
         using var factory = new ActivityApiFactory();
         using var client = factory.CreateClient();
 
@@ -102,6 +132,12 @@ public sealed class ActivityApiTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("activity_date_invalid", body.GetProperty("code").GetString());
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    private sealed class ThrowingActivitySink : IActivityEventSink
+    {
+        public void Append(ActivityEvent activityEvent) =>
+            throw new InvalidOperationException("telemetry unavailable");
     }
 }
 

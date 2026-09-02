@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentApiError, createAgentApi } from "../../api/agentsApi";
 import { createSettingsApi } from "../../api/settingsApi";
 import type { AgentStatus } from "../../api/agentsApi";
+import { SessionHygieneControls } from "./SessionHygieneControls";
 import { StandardizedTerminalSurface } from "./StandardizedTerminalSurface";
 
 function errorMessage(error: unknown): string {
@@ -86,7 +87,10 @@ export function PersonalAgentPage() {
       </div>
 
       {status.runtimeHealthy ? (
-        <StandardizedTerminalSurface scrollbackLines={scrollbackLines} />
+        <>
+          <StandardizedTerminalSurface scrollbackLines={scrollbackLines} />
+          <SessionHygieneControls />
+        </>
       ) : (
         <section className="terminal-not-ready" aria-labelledby="terminal-not-ready-title">
           <span className="eyebrow">OBSERVER STATUS</span>

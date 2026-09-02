@@ -5,4 +5,7 @@ runtime/agents/work/HANDOFF.md and is ignored by Git.
 
 ## Unresolved work
 
+<!-- BEGIN AUTO HANDOFF -->
+<!-- END AUTO HANDOFF -->
+
 ## Context for the next native session

@@ -16,6 +16,10 @@ runtime/
     AGENTS.md           # local agent instructions, when private
     MEMORY.md           # generated/materialized memory
     HANDOFF.md          # clear/rotation handoff
+    checkpoints/        # versioned checkpoint manifests
+    terminal/
+      active.log        # bounded harness-owned terminal log
+      active.log.N      # retained rotated logs
     local/              # mutable agent overrides
     transcripts/        # raw native-session artifacts
   browser-profiles/<realm>/

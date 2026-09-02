@@ -110,9 +110,9 @@ Acceptance gate:
   harness/tmux-boundary acceptance.
 - [x] Dashboard exposes idle, busy, waiting, and error states with fixed
   terminal geometry and no resize operation.
-- [ ] Clear and hard rotation checkpoint before closing context.
+- [x] Clear and hard rotation checkpoint before closing context.
 - [ ] Activity events are immutable and visible in a feed/counter surface.
-- [ ] Terminal logs remain separate from durable memory.
+- [x] Terminal logs remain separate from durable memory.
 
 ## Phase 0D — Codex adapter
 

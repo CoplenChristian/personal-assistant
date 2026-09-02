@@ -1,5 +1,8 @@
+using System.Globalization;
 using PersonalAssistant.Harness.Bootstrap;
+using PersonalAssistant.Harness.Activity;
 using PersonalAssistant.Harness.Agents;
+using PersonalAssistant.Harness.Memory;
 using PersonalAssistant.Harness.Persistence;
 using PersonalAssistant.Harness.Policies;
 using PersonalAssistant.Harness.Runtime;
@@ -14,6 +17,8 @@ public sealed class HarnessRuntime : IDisposable
     private readonly TmuxTerminalStream terminalStream;
     private readonly TerminalInputSerializer terminalInput;
     private readonly TerminalActivityStateTracker terminalState;
+    private readonly ICheckpointCoordinator checkpointCoordinator;
+    private readonly ISessionHygieneService sessionHygiene;
 
     private HarnessRuntime(
         SettingsService settings,
@@ -23,7 +28,9 @@ public sealed class HarnessRuntime : IDisposable
         TmuxSessionManager tmux,
         TmuxTerminalStream terminalStream,
         TerminalInputSerializer terminalInput,
-        TerminalActivityStateTracker terminalState)
+        TerminalActivityStateTracker terminalState,
+        ICheckpointCoordinator checkpointCoordinator,
+        ISessionHygieneService sessionHygiene)
     {
         Settings = settings;
         this.database = database;
@@ -33,6 +40,8 @@ public sealed class HarnessRuntime : IDisposable
         this.terminalStream = terminalStream;
         this.terminalInput = terminalInput;
         this.terminalState = terminalState;
+        this.checkpointCoordinator = checkpointCoordinator;
+        this.sessionHygiene = sessionHygiene;
     }
 
     public SettingsService Settings { get; }
@@ -42,6 +51,8 @@ public sealed class HarnessRuntime : IDisposable
     public TmuxTerminalStream TerminalStream => terminalStream;
     public TerminalInputSerializer TerminalInput => terminalInput;
     public TerminalActivityStateTracker TerminalState => terminalState;
+    public ICheckpointCoordinator Checkpoints => checkpointCoordinator;
+    public ISessionHygieneService SessionHygiene => sessionHygiene;
 
     public static HarnessRuntime Create(
         string repositoryRoot,
@@ -62,17 +73,34 @@ public sealed class HarnessRuntime : IDisposable
         TmuxTerminalStream? terminalStream = null;
         TerminalInputSerializer? terminalInput = null;
         TerminalActivityStateTracker? terminalState = null;
+        SessionHygieneService? sessionHygiene = null;
         try
         {
             var store = new SqliteSettingsOverrideStore(database);
             var service = new SettingsService(SettingsRegistry.CreateDefault(), context, store);
-            _ = service.GetSnapshot();
+            var settingsSnapshot = service.GetSnapshot();
             var registry = new AgentRegistry(root, bootstrap.TmuxPrefix);
             var personalDefinition = registry.LoadPersonal();
             var agentStore = new SqliteAgentSessionStore(database);
             var tmux = new TmuxSessionManager(bootstrap.TmuxPrefix);
-            var agents = new AgentSessionService(registry, agentStore, tmux, new ClaudeRuntimeAdapter(tmux));
-            terminalStream = new TmuxTerminalStream(tmux, bootstrap.RuntimeDirectory);
+            var claude = new ClaudeRuntimeAdapter(tmux);
+            var agents = new AgentSessionService(registry, agentStore, tmux, claude);
+            var activitySink = new SqliteActivityEventSink(database);
+            var checkpointCoordinator = new CheckpointCoordinator(root, bootstrap.RuntimeDirectory, activitySink);
+            sessionHygiene = new SessionHygieneService(registry, agentStore, claude, checkpointCoordinator, activitySink);
+            var terminalWarningBytes = ReadInt64Setting(settingsSnapshot, "sessions.terminalLogWarningBytes");
+            var configuredRotationBytes = ReadInt64Setting(settingsSnapshot, "sessions.nativeSessionRotateBytes");
+            var terminalRotationBytes = Math.Max(terminalWarningBytes + 1, configuredRotationBytes);
+            var retainedLogFiles = checked((int)ReadInt64Setting(settingsSnapshot, "sessions.terminalLogRotatedFiles"));
+            var terminalLogWriter = new TerminalLogWriter(
+                bootstrap.RuntimeDirectory,
+                personalDefinition.Id,
+                terminalWarningBytes,
+                terminalRotationBytes,
+                retainedLogFiles,
+                activitySink,
+                personalDefinition.Realms.FirstOrDefault());
+            terminalStream = new TmuxTerminalStream(tmux, bootstrap.RuntimeDirectory, terminalLogWriter);
             terminalInput = new TerminalInputSerializer(
                 personalDefinition.Id,
                 (request, cancellationToken) => tmux.SendLiteralInputAsync(
@@ -80,7 +108,7 @@ public sealed class HarnessRuntime : IDisposable
                     request.Data,
                     cancellationToken));
             terminalState = new TerminalActivityStateTracker(personalDefinition.Id);
-            var runtime = new HarnessRuntime(service, database, bootstrap, agents, tmux, terminalStream, terminalInput, terminalState);
+            var runtime = new HarnessRuntime(service, database, bootstrap, agents, tmux, terminalStream, terminalInput, terminalState, checkpointCoordinator, sessionHygiene);
             agents.ReconcilePersonal();
             return runtime;
         }
@@ -89,6 +117,7 @@ public sealed class HarnessRuntime : IDisposable
             terminalState?.Dispose();
             terminalInput?.Dispose();
             terminalStream?.Dispose();
+            sessionHygiene?.Dispose();
             database.Dispose();
             throw;
         }
@@ -101,4 +130,9 @@ public sealed class HarnessRuntime : IDisposable
         terminalStream.Dispose();
         database.Dispose();
     }
+
+    private static long ReadInt64Setting(SettingsSnapshot snapshot, string key) =>
+        Convert.ToInt64(
+            snapshot.Settings.Single(setting => string.Equals(setting.Key, key, StringComparison.Ordinal)).Value,
+            CultureInfo.InvariantCulture);
 }

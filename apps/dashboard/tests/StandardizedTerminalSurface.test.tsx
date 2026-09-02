@@ -57,7 +57,7 @@ describe("StandardizedTerminalSurface", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders canonical screen frames and reports harness input acceptance", async () => {
+  it("renders canonical screen frames and reports temporary harness input acceptance", async () => {
     render(<StandardizedTerminalSurface scrollbackLines={5000} />);
     const socket = FakeWebSocket.instances[0]!;
     actOpen(socket);
@@ -74,7 +74,31 @@ describe("StandardizedTerminalSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send input" }));
     expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: "input", sequence: 1, data: "list files\r" }));
     send(socket, { type: "inputAck", sequence: 1 });
-    expect(await screen.findByText("Input 1 accepted by harness.")).toBeInTheDocument();
+    expect(screen.getByText("Input accepted by harness.")).toBeInTheDocument();
+    expect(screen.queryByText(/Input 1/)).not.toBeInTheDocument();
+  });
+
+  it("clears the temporary input status after five seconds", () => {
+    vi.useFakeTimers();
+    try {
+      render(<StandardizedTerminalSurface scrollbackLines={5000} />);
+      const socket = FakeWebSocket.instances[0]!;
+      actOpen(socket);
+      send(socket, { type: "hello", protocol: "phase-0c-terminal.standardized.v1", agentId: "personal" });
+      send(socket, { type: "screen", sequence: 0, data: "canonical screen", columns: 80, rows: 24, hydrationBoundary: true });
+
+      fireEvent.change(screen.getByLabelText("Standardized terminal input"), { target: { value: "list files" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send input" }));
+      send(socket, { type: "inputAck", sequence: 1 });
+      expect(screen.getByText("Input accepted by harness.")).toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(4999));
+      expect(screen.getByText("Input accepted by harness.")).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1));
+      expect(screen.queryByText("Input accepted by harness.")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("replaces the canonical screen after reconnect without retaining the prior screen", async () => {

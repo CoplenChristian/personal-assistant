@@ -17,7 +17,8 @@ public interface IAgentSessionStore
         string? lastError,
         ActivityEvent? activityEvent,
         string? nativeConversationReference = null,
-        AgentDesiredState? desiredState = null);
+        AgentDesiredState? desiredState = null,
+        bool clearNativeConversationReference = false);
 
     void RecordConversationReference(string agentId, string reference);
 }

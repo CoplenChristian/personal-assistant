@@ -67,4 +67,85 @@ public sealed record ActivityEvent(
                 resumeFallback,
                 errorCode
             }));
+
+    public static ActivityEvent MemoryCheckpoint(
+        string agentId,
+        string? realm,
+        string reason,
+        string status,
+        string outcome) =>
+        new(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            agentId,
+            realm,
+            "memory",
+            "checkpoint",
+            "runtime-memory",
+            status,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                eventType = "memory.checkpoint",
+                reason,
+                outcome
+            }));
+
+    public static ActivityEvent AgentHygiene(
+        string agentId,
+        string? realm,
+        string operation,
+        string status,
+        string outcome,
+        string? errorCode = null) =>
+        new(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            agentId,
+            realm,
+            "agents",
+            operation,
+            "runtime-session",
+            status,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                eventType = $"agent.{operation}",
+                outcome,
+                errorCode
+            }));
+
+    public static ActivityEvent TerminalLogWarning(string agentId, string? realm) =>
+        new(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            agentId,
+            realm,
+            "sessions",
+            "terminal_log_warning",
+            "runtime-terminal-log",
+            "warning",
+            null,
+            JsonSerializer.Serialize(new
+            {
+                eventType = "terminal.log.warning",
+                outcome = "threshold_reached"
+            }));
+
+    public static ActivityEvent TerminalLogRotated(string agentId, string? realm) =>
+        new(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            agentId,
+            realm,
+            "sessions",
+            "terminal_log_rotation",
+            "runtime-terminal-log",
+            "success",
+            null,
+            JsonSerializer.Serialize(new
+            {
+                eventType = "terminal.log.rotation",
+                outcome = "rotated"
+            }));
 }

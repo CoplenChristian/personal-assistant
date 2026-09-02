@@ -1,6 +1,6 @@
 # T2 Proofs: Serialized input, canonical screen, and explicit terminal state
 
-Status: complete; transport amendment verified
+Status: complete; transport amendment and UX follow-up verified
 Spec: [03-spec-terminal-dashboard.md](../03-spec-terminal-dashboard.md)
 Task: [03-tasks-terminal-dashboard.md](../03-tasks-terminal-dashboard.md), parent task 2.0
 
@@ -31,12 +31,14 @@ were added.
   errors, and never echoes private input into protocol responses.
 - The plain-text screen owns the rendered canonical view; reconnect and Strict
   Mode cleanup do not stop the native session.
+- Visible input status is unnumbered and temporary; protocol sequence numbers
+  remain internal correlation data.
 
 ## Evidence summary
 
-- 73 harness tests, 17 server tests, and 15 dashboard tests pass, including
-  serializer, tmux, state-tracker, WebSocket input, fixed-geometry,
-  unhealthy-session, and origin tests.
+- 73 harness tests, 17 server tests, and 16 dashboard tests pass, including
+  serializer, tmux, state-tracker, WebSocket input, fixed-geometry, temporary
+  input-status, unhealthy-session, and origin tests.
 - The ASP.NET-served hosted route was exercised in the in-app browser against
   the rebuilt bundle. It showed the canonical screen, fixed viewport metadata,
   and no resize control; the live personal screen was not copied into the
@@ -97,7 +99,7 @@ Mode lifecycles.
 workspace remains the only interactive input boundary. The screen normalizer
 converts tmux line endings, trims capture padding, and preserves long lines in
 the fixed plain-text viewport instead of asking a browser terminal emulator to
-reflow them.
+reflow them. Input status copy stays unnumbered and clears after five seconds.
 
 ## Artifact: Hosted browser proof
 
@@ -128,7 +130,7 @@ Commands run from the repository root after the T2 transport amendment:
 npm test
   PersonalAssistant.Harness.Tests: 73 passed
   PersonalAssistant.Server.Tests: 17 passed
-  dashboard: 15 passed
+  dashboard: 16 passed
 
 npm run build
   .NET build: 0 warnings, 0 errors

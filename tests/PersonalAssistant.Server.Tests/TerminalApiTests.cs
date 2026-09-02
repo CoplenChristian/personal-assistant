@@ -360,7 +360,7 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
 
     public sealed class FakeTerminalExecutor(string runtimeDirectory, string? captureOutput = null) : ITmuxCommandExecutor
     {
-        public string SinkPath { get; } = Path.Combine(runtimeDirectory, "terminal-streams", "test-pa-personal.log");
+        public string SinkPath { get; } = Path.Combine(runtimeDirectory, "agents", "personal", "terminal", "active.log");
         public string CaptureOutput { get; set; } = captureOutput ?? "fixture snapshot\r\n";
         public List<IReadOnlyList<string>> Commands { get; } = [];
         public int CaptureCount => Volatile.Read(ref captureCount);

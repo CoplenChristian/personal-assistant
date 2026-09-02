@@ -1,10 +1,10 @@
 # Development notes
 
 Phase 0A settings/configuration and Phase 0B lifecycle are implemented and
-reviewed. Phase 0C T1/T2 now covers the fixed-geometry canonical terminal
-screen, coalesced observation, serialized input, and explicit terminal state;
-session hygiene, activity aggregation, and external integrations remain
-deferred.
+reviewed. Phase 0C T1/T2/T3 covers the fixed-geometry canonical terminal
+screen, coalesced observation, serialized input, explicit terminal state,
+checkpoint-gated session hygiene, and rotated terminal logs; activity
+aggregation and external integrations remain deferred.
 
 ## Local prerequisites
 

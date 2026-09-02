@@ -1,6 +1,6 @@
 # 03-tasks-terminal-dashboard.md
 
-Status: T1-T2 complete; T2 corrective alignment complete; T3-T4 pending
+Status: T1-T2 complete; T2 corrective alignment and UX follow-up complete; T3 complete; T4 pending
 Spec: [03-spec-terminal-dashboard.md](03-spec-terminal-dashboard.md)
 Planning mode: planning audit passed; implementation may begin through the SDD workflow.
 
@@ -186,8 +186,12 @@ scheduling, skills, integrations, memory search, or multi-user access.
   server, and dashboard tests prove resize is not a supported client operation,
   canonical screen updates replace the prior screen, and the UI never claims
   that Claude consumed or processed input.
+- [x] 2.7 Keep transport sequence numbers out of visible input status: show
+  unnumbered queued/accepted copy for five seconds and clear it on expiry,
+  reconnect, or unmount. Test artifact: dashboard tests prove the copy is
+  unnumbered and expires deterministically.
 
-### [ ] 3.0 Checkpoint-gated session hygiene and terminal logs
+### [x] 3.0 Checkpoint-gated session hygiene and terminal logs
 
 #### 3.0 Proof Artifact(s)
 
@@ -206,26 +210,28 @@ scheduling, skills, integrations, memory search, or multi-user access.
 
 #### 3.0 Tasks
 
-- [ ] 3.1 Define the checkpoint coordinator contract and runtime-only checkpoint
+- [x] 3.1 Define the checkpoint coordinator contract and runtime-only checkpoint
   artifact format, preserving human-maintained content outside generated
-  markers and emitting privacy-safe activity. Test artifact: fake checkpoint
-  tests prove providerless success, failure, cancellation, ignored-path
-  placement, and no tracked memory/handoff writes.
-- [ ] 3.2 Extend the Claude adapter/session hygiene service with typed compact,
+  markers and emitting privacy-safe activity. The manifest is versioned JSON
+  under `runtime/agents/<id>/checkpoints/` and stores only safe metadata and
+  content hashes. Test artifact: fake checkpoint tests prove providerless
+  success, failure, cancellation, ignored-path placement, marker preservation,
+  and no tracked memory/handoff writes.
+- [x] 3.2 Extend the Claude adapter/session hygiene service with typed compact,
   clear, and rotate operations, opaque reference recording, desired-state
   preservation, retry/idempotency handling, and no arbitrary executable input.
   Test artifact: fake runtime tests prove checkpoint precedes each native
   mutation and failed checkpoint produces zero runtime action.
-- [ ] 3.3 Add explicit personal-agent hygiene routes and ProblemDetails/error
+- [x] 3.3 Add explicit personal-agent hygiene routes and ProblemDetails/error
   contracts; serialize one hygiene action per logical agent and append immutable
   success/blocked/failure activity without payloads. Test artifact: API tests
   cover concurrent/repeated action rejection, checkpoint failure, runtime
   failure, and retained agent/session/audit state.
-- [ ] 3.4 Implement the harness-owned terminal-log writer with active-log
+- [x] 3.4 Implement the harness-owned terminal-log writer with active-log
   location, warning threshold, atomic rotation, configured retention, bounded
   writes, and shutdown cleanup. Test artifact: temporary runtime tests prove
   warning/rotation/retention and no log contents in activity/API metadata.
-- [ ] 3.5 Add dashboard compact/clear/rotate/checkpoint controls with explicit
+- [x] 3.5 Add dashboard compact/clear/rotate/checkpoint controls with explicit
   labels, progress, disabled-in-flight behavior, retry-safe feedback, and
   error/blocked states. Test artifact: React tests and hosted screenshot prove
   the controls never expose private paths or fabricate successful actions.

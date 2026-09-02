@@ -37,8 +37,9 @@ shared/USER.template.md
 At runtime, the harness materializes them into:
 
 ~~~text
-runtime/agents/<id>/MEMORY.md
-runtime/agents/<id>/HANDOFF.md
+runtime/agents/<id>/MEMORY.md      ignored generated memory
+runtime/agents/<id>/HANDOFF.md     ignored handoff
+runtime/agents/<id>/checkpoints/   ignored checkpoint manifests
 runtime/shared/USER.md
 ~~~
 

@@ -141,6 +141,11 @@ the per-agent ordering and state boundaries established by the architecture.
   serialized tmux input operation completed successfully. It shall not claim
   that Claude received, displayed, interpreted, or acted on the input; the
   harness has no receipt/processing acknowledgement in this slice.
+- The dashboard shall not expose the transport sequence in input status copy.
+  It shall show `Input queued.` or `Input accepted by harness.` without a
+  number, keep that status visible for five seconds, and clear it on expiry,
+  reconnect, or unmount. The wire-level sequence remains available only for
+  correlation inside the protocol.
 - The server shall expose an explicit terminal activity state separate from the
   Phase 0B session observed state. The supported states are `idle`, `busy`,
   `waiting`, and `error`.
@@ -187,6 +192,21 @@ safe, explicit, and independently observable.
   preserve existing human-maintained content outside generated markers, and
   record a safe checkpoint/activity result. It shall not copy private memory,
   handoffs, transcripts, or documents into Git-tracked files.
+- The T3.1 checkpoint contract shall accept a bounded reason (`compact`,
+  `clear`, or `rotate`) plus generated memory and handoff sections. It shall
+  materialize the tracked templates only at `runtime/agents/<id>/MEMORY.md` and
+  `runtime/agents/<id>/HANDOFF.md`, replacing content only between the
+  `BEGIN/END AUTO MEMORY` and `BEGIN/END AUTO HANDOFF` markers.
+- Each checkpoint shall write a versioned JSON manifest at
+  `runtime/agents/<id>/checkpoints/<checkpoint-id>.json`. The manifest may
+  contain the logical agent, realm, opaque session/reference identifiers,
+  reason, timestamp, and content hashes, but no absolute paths or generated
+  memory/handoff content. Temporary writes shall remain under the ignored
+  runtime directory and be cleaned up after success, failure, or cancellation.
+- Checkpoint activity shall use category `memory` and operation `checkpoint`.
+  Its metadata shall contain only the safe event type, reason, and outcome; it
+  shall never contain checkpoint paths, byte counts, hashes, memory, handoff,
+  transcript, or terminal content.
 - If the checkpoint fails, the requested compact/clear/rotate operation shall
   stop before mutating the native session and shall return a stable error with a
   visible dashboard explanation. There is no silent force path in this slice.

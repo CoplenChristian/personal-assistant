@@ -35,7 +35,7 @@ public sealed class TmuxTerminalStreamTests
 
             Assert.Equal(1, executor.Commands.Count(command => command[0] == "pipe-pane"));
             Assert.Contains("/usr/bin/tee", executor.Commands.Single(command => command[0] == "pipe-pane")[3], StringComparison.Ordinal);
-            Assert.Contains("terminal-streams", first.SinkPath, StringComparison.Ordinal);
+            Assert.Contains(Path.Combine("agents", "personal", "terminal"), first.SinkPath, StringComparison.Ordinal);
 
             first.Dispose();
             Assert.Equal(0, executor.Commands.Count(command => command[0] == "pipe-pane" && command.Count == 3));

@@ -4,17 +4,24 @@ namespace PersonalAssistant.Harness.Runtime;
 
 public sealed class TmuxTerminalStream : IDisposable
 {
+    private const long DefaultLogWarningBytes = 25 * 1024 * 1024;
+    private const long DefaultLogRotationBytes = 50 * 1024 * 1024;
+    private const int DefaultRetainedLogFiles = 5;
     private readonly object syncRoot = new();
     private readonly TmuxSessionManager tmux;
-    private readonly string streamRoot;
+    private readonly TerminalLogWriter logWriter;
     private readonly Dictionary<string, StreamState> sessions = new(StringComparer.Ordinal);
     private bool disposed;
 
-    public TmuxTerminalStream(TmuxSessionManager tmux, string runtimeDirectory)
+    public TmuxTerminalStream(TmuxSessionManager tmux, string runtimeDirectory, TerminalLogWriter? logWriter = null)
     {
         this.tmux = tmux;
-        streamRoot = Path.Combine(Path.GetFullPath(runtimeDirectory), "terminal-streams");
-        Directory.CreateDirectory(streamRoot);
+        this.logWriter = logWriter ?? new TerminalLogWriter(
+            runtimeDirectory,
+            "personal",
+            DefaultLogWarningBytes,
+            DefaultLogRotationBytes,
+            DefaultRetainedLogFiles);
     }
 
     public TmuxPaneSnapshot Capture(string sessionName, int scrollbackLines) =>
@@ -35,9 +42,11 @@ public sealed class TmuxTerminalStream : IDisposable
             ThrowIfDisposed();
             if (!sessions.TryGetValue(sessionName, out var state))
             {
-                var sinkPath = Path.Combine(streamRoot, $"{sessionName}.log");
+                var sinkPath = logWriter.ActiveLogPath;
+                Directory.CreateDirectory(Path.GetDirectoryName(sinkPath)!);
                 var initialOffset = EnsureSink(sinkPath);
-                state = new StreamState(sinkPath, new TerminalOutputHub(), new CancellationTokenSource(), initialOffset);
+                state = new StreamState(sinkPath, new TerminalOutputHub(), new CancellationTokenSource(), initialOffset, logWriter);
+                state.RestartPipe = () => RestartPanePipe(sessionName, sinkPath);
                 var output = state.Output.SubscribeAfterCurrent();
                 try
                 {
@@ -80,6 +89,7 @@ public sealed class TmuxTerminalStream : IDisposable
             }
 
             sessions.Clear();
+            logWriter.Dispose();
             disposed = true;
         }
     }
@@ -112,31 +122,67 @@ public sealed class TmuxTerminalStream : IDisposable
         }
     }
 
-    private static async Task TailSinkAsync(StreamState state, CancellationToken cancellationToken)
+    private async Task TailSinkAsync(StreamState state, CancellationToken cancellationToken)
     {
         var buffer = new char[4096];
         try
         {
-            await using var file = new FileStream(
-                state.SinkPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 4096,
-                useAsync: true);
-            file.Seek(state.InitialOffset, SeekOrigin.Begin);
-            using var reader = new StreamReader(file, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 4096);
             state.TailReady.TrySetResult(true);
+            var offset = state.InitialOffset;
             while (!cancellationToken.IsCancellationRequested)
             {
-                var count = await reader.ReadAsync(buffer.AsMemory(), cancellationToken);
-                if (count > 0)
+                var rotated = false;
+                await using (var file = new FileStream(
+                    state.SinkPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete,
+                    bufferSize: 4096,
+                    useAsync: true))
                 {
-                    state.Output.Publish(new string(buffer, 0, count));
-                    continue;
+                    if (offset > file.Length)
+                    {
+                        offset = 0;
+                    }
+
+                    file.Seek(offset, SeekOrigin.Begin);
+                    using var reader = new StreamReader(file, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 4096);
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        var count = await reader.ReadAsync(buffer.AsMemory(), cancellationToken);
+                        if (count > 0)
+                        {
+                            state.Output.Publish(new string(buffer, 0, count));
+                            offset = file.Position;
+                            var observation = state.LogWriter.Observe();
+                            if (observation.Rotated)
+                            {
+                                state.RestartPipe?.Invoke();
+                                offset = 0;
+                                rotated = true;
+                                break;
+                            }
+
+                            continue;
+                        }
+
+                        var idleObservation = state.LogWriter.Observe();
+                        if (idleObservation.Rotated)
+                        {
+                            state.RestartPipe?.Invoke();
+                            offset = 0;
+                            rotated = true;
+                            break;
+                        }
+
+                        await Task.Delay(50, cancellationToken);
+                    }
                 }
 
-                await Task.Delay(50, cancellationToken);
+                if (!rotated)
+                {
+                    await Task.Delay(50, cancellationToken);
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -172,6 +218,19 @@ public sealed class TmuxTerminalStream : IDisposable
         }
     }
 
+    private void RestartPanePipe(string sessionName, string sinkPath)
+    {
+        try
+        {
+            tmux.StopPanePipe(sessionName);
+            tmux.StartPanePipe(sessionName, sinkPath);
+        }
+        catch (Exception exception) when (exception is TmuxUnavailableException or TmuxOperationException)
+        {
+            // The observer will surface a stream error if the pipe cannot be restarted.
+        }
+    }
+
     private static void StopTail(StreamState state)
     {
         state.Cancellation.Cancel();
@@ -195,15 +254,18 @@ public sealed class TmuxTerminalStream : IDisposable
         string sinkPath,
         TerminalOutputHub output,
         CancellationTokenSource cancellation,
-        long initialOffset)
+        long initialOffset,
+        TerminalLogWriter logWriter)
     {
         public string SinkPath { get; } = sinkPath;
         public TerminalOutputHub Output { get; } = output;
         public CancellationTokenSource Cancellation { get; } = cancellation;
         public long InitialOffset { get; } = initialOffset;
+        public TerminalLogWriter LogWriter { get; } = logWriter;
         public TaskCompletionSource<bool> TailReady { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task? TailTask { get; set; }
         public int ObserverCount { get; set; }
+        public Action? RestartPipe { get; set; }
     }
 }
 

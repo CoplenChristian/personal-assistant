@@ -6,6 +6,7 @@ and renders server metadata rather than maintaining a second settings or
 lifecycle policy list.
 
 The terminal surface renders a fixed-geometry canonical screen and submits
-serialized input through the harness WebSocket boundary; activity aggregation
-and session hygiene remain deferred. This UI does not probe providers, store
-credentials, or invent connected integration state.
+serialized input through the harness WebSocket boundary. Session hygiene
+controls checkpoint before compact, clear, or rotate and report only the
+harness boundary result; activity aggregation remains deferred. This UI does
+not probe providers, store credentials, or invent connected integration state.

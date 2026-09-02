@@ -122,7 +122,8 @@ public sealed class SqliteAgentSessionStore : IAgentSessionStore
         string? lastError,
         ActivityEvent? activityEvent,
         string? nativeConversationReference = null,
-        AgentDesiredState? desiredState = null)
+        AgentDesiredState? desiredState = null,
+        bool clearNativeConversationReference = false)
     {
         database.ExecuteInTransaction(transaction =>
         {
@@ -147,7 +148,10 @@ public sealed class SqliteAgentSessionStore : IAgentSessionStore
             command.CommandText = """
                 UPDATE sessions
                 SET observed_state = $observed_state,
-                    native_conversation_ref = COALESCE($native_conversation_ref, native_conversation_ref),
+                    native_conversation_ref = CASE
+                        WHEN $clear_native_conversation_reference = 1 THEN NULL
+                        ELSE COALESCE($native_conversation_reference, native_conversation_ref)
+                    END,
                     started_at = CASE
                         WHEN $observed_state = 'starting' THEN $now
                         ELSE started_at
@@ -166,7 +170,8 @@ public sealed class SqliteAgentSessionStore : IAgentSessionStore
                 """;
             command.Parameters.AddWithValue("$observed_state", ToDatabaseValue(observedState));
             command.Parameters.AddWithValue("$desired_state", desiredState is null ? DBNull.Value : ToDatabaseValue(desiredState.Value));
-            command.Parameters.AddWithValue("$native_conversation_ref", (object?)nativeConversationReference ?? DBNull.Value);
+            command.Parameters.AddWithValue("$clear_native_conversation_reference", clearNativeConversationReference ? 1 : 0);
+            command.Parameters.AddWithValue("$native_conversation_reference", (object?)nativeConversationReference ?? DBNull.Value);
             command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
             command.Parameters.AddWithValue("$last_error", (object?)lastError ?? DBNull.Value);
             command.Parameters.AddWithValue("$agent_id", definition.Id);

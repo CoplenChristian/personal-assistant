@@ -14,6 +14,12 @@ public interface IClaudeRuntimeAdapter
 
     string RecordConversationReference(AgentDefinition agent, PersistedSession session, string reference);
 
+    void Compact(AgentDefinition agent, PersistedSession session);
+
+    void Clear(AgentDefinition agent, PersistedSession session);
+
+    void Rotate(AgentDefinition agent, PersistedSession session);
+
     void Stop(AgentDefinition agent, PersistedSession session);
 }
 
@@ -82,5 +88,23 @@ public sealed class ClaudeRuntimeAdapter : IClaudeRuntimeAdapter
         return reference.Trim();
     }
 
+    public void Compact(AgentDefinition agent, PersistedSession session) =>
+        SendNativeControl(session, "/compact\r");
+
+    public void Clear(AgentDefinition agent, PersistedSession session) =>
+        SendNativeControl(session, "/clear\r");
+
+    public void Rotate(AgentDefinition agent, PersistedSession session)
+    {
+        tmux.StopSession(session.TmuxSessionName);
+        tmux.EnsureSession(session.TmuxSessionName, agent.WorkingDirectory);
+        StartNewConversation(agent, session);
+    }
+
     public void Stop(AgentDefinition agent, PersistedSession session) => tmux.StopSession(session.TmuxSessionName);
+
+    private void SendNativeControl(PersistedSession session, string control)
+    {
+        tmux.SendLiteralInput(session.TmuxSessionName, control);
+    }
 }

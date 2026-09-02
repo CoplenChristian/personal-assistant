@@ -24,6 +24,7 @@ builder.Services.AddSingleton<TmuxSessionManager>(serviceProvider => serviceProv
 builder.Services.AddSingleton<TmuxTerminalStream>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalStream);
 builder.Services.AddSingleton<TerminalInputSerializer>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalInput);
 builder.Services.AddSingleton<TerminalActivityStateTracker>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalState);
+builder.Services.AddSingleton<ISessionHygieneService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().SessionHygiene);
 builder.Services.AddProblemDetails();
 builder.WebHost.UseUrls($"http://{harnessRuntime.Bootstrap.ServerHost}:{harnessRuntime.Bootstrap.ServerPort}");
 
@@ -42,6 +43,7 @@ if (Directory.Exists(dashboardRoot))
 
 app.MapSettingsEndpoints();
 app.MapAgentEndpoints();
+app.MapSessionHygieneEndpoints();
 app.MapTerminalEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 if (Directory.Exists(dashboardRoot))

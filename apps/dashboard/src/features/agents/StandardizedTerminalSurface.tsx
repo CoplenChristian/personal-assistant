@@ -41,6 +41,7 @@ function terminalErrorMessage(frame: TerminalErrorFrame): string {
 export function StandardizedTerminalSurface({ scrollbackLines }: StandardizedTerminalSurfaceProps) {
   const screenElement = useRef<HTMLPreElement | null>(null);
   const sendInput = useRef<((data: string) => boolean) | null>(null);
+  const deliveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectionState, setConnectionState] = useState<TerminalConnectionState>("connecting");
   const [activityState, setActivityState] = useState<TerminalActivityState>("idle");
   const [screenData, setScreenData] = useState("");
@@ -68,6 +69,22 @@ export function StandardizedTerminalSurface({ scrollbackLines }: StandardizedTer
     setScreenDimensions({ columns: 0, rows: 0 });
     setError(null);
     setDelivery(null);
+    if (deliveryTimer.current) {
+      clearTimeout(deliveryTimer.current);
+      deliveryTimer.current = null;
+    }
+
+    const showDeliveryStatus = (message: string) => {
+      if (deliveryTimer.current) {
+        clearTimeout(deliveryTimer.current);
+      }
+
+      setDelivery(message);
+      deliveryTimer.current = setTimeout(() => {
+        setDelivery(null);
+        deliveryTimer.current = null;
+      }, 5000);
+    };
 
     sendInput.current = (data: string) => {
       if (cancelled || socket.readyState !== WebSocket.OPEN) {
@@ -78,7 +95,7 @@ export function StandardizedTerminalSurface({ scrollbackLines }: StandardizedTer
 
       try {
         socket.send(JSON.stringify({ type: "input", sequence: nextInputSequence, data }));
-        setDelivery(`Input ${nextInputSequence} queued.`);
+        showDeliveryStatus("Input queued.");
         nextInputSequence += 1;
         return true;
       } catch {
@@ -125,7 +142,7 @@ export function StandardizedTerminalSurface({ scrollbackLines }: StandardizedTer
         }
 
         if (frame.type === "inputAck") {
-          setDelivery(`Input ${frame.sequence} accepted by harness.`);
+          showDeliveryStatus("Input accepted by harness.");
           return;
         }
 
@@ -154,6 +171,10 @@ export function StandardizedTerminalSurface({ scrollbackLines }: StandardizedTer
     return () => {
       cancelled = true;
       sendInput.current = null;
+      if (deliveryTimer.current) {
+        clearTimeout(deliveryTimer.current);
+        deliveryTimer.current = null;
+      }
       socket.close(1000, "standardized terminal observer unmounted");
     };
   }, [connectionAttempt]);

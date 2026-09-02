@@ -12,8 +12,10 @@ activity carries the `work` realm with safe lifecycle metadata only.
 
 ## Acceptance evidence
 
-- `AgentApiTests.cs` proves work status/stop responses, stable identity fields,
-  and no personal-realm fallback.
+- `AgentApiTests.cs` proves work status, start, and stop responses, stable
+  identity fields, and no personal-realm fallback.
+- `HarnessStartupReconciliationTests.cs` proves both reviewed agents reconcile
+  on harness startup.
 - `WorkAgentSessionServiceTests.Stop_retains_logical_work_agent_session_and_activity_history`
   and reconcile adoption tests assert `work` realm activity metadata.
 - Providerless API tests return only contract fields (`id`, `runtime`,

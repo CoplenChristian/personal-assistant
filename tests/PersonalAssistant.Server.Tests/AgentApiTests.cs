@@ -57,6 +57,22 @@ public sealed class AgentApiTests
     }
 
     [Fact]
+    public async Task Start_work_sets_running_desired_state_and_work_identity()
+    {
+        using var factory = new SettingsApiFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync("/api/agents/work/start", content: null);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("work", body.GetProperty("id").GetString());
+        Assert.Equal("codex", body.GetProperty("runtime").GetString());
+        Assert.Equal("running", body.GetProperty("desiredState").GetString());
+        Assert.Equal("test-pa-work", body.GetProperty("tmuxSessionName").GetString());
+    }
+
+    [Fact]
     public async Task Stop_work_is_idempotent_and_preserves_work_identity()
     {
         using var factory = new SettingsApiFactory();

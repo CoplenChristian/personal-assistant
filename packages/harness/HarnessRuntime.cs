@@ -136,7 +136,7 @@ public sealed class HarnessRuntime : IDisposable
                 sessionHygiene,
                 activitySink,
                 activityQuery);
-            agents.ReconcilePersonal();
+            HarnessStartupReconciliation.ReconcileReviewedAgents(agents);
             return runtime;
         }
         catch

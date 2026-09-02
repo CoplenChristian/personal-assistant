@@ -63,6 +63,21 @@ public sealed class WorkAgentSessionServiceTests
     }
 
     [Fact]
+    public void Reconcile_recreates_a_missing_session_when_desired_state_is_running()
+    {
+        using var fixture = new WorkFixture();
+        fixture.Store.EnsureAgent(fixture.Definition);
+        fixture.Store.SetDesiredState(fixture.Definition.Id, AgentDesiredState.Running);
+
+        var status = fixture.Service.ReconcileWork();
+
+        Assert.True(status.RuntimeHealthy);
+        Assert.Equal(SessionObservedState.Running, status.Session.ObservedState);
+        Assert.Contains(fixture.Tmux.Commands, command => command[0] == "new-session");
+        Assert.Contains(fixture.Tmux.Commands, command => command[0] == "respawn-pane");
+    }
+
+    [Fact]
     public void Stopped_work_agent_is_not_resurrected_when_session_is_missing()
     {
         using var fixture = new WorkFixture();

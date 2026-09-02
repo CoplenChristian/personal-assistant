@@ -77,7 +77,7 @@ public sealed class ActivityApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(2, body.GetProperty("counters").GetProperty(ActivityCategoryKeys.AgentClears).GetInt32());
         Assert.Equal(1, body.GetProperty("counters").GetProperty(ActivityCategoryKeys.AgentRotations).GetInt32());
-        Assert.Equal(2, body.GetProperty("counters").GetProperty(ActivityCategoryKeys.SecurityBlocked).GetInt32());
+        Assert.Equal(0, body.GetProperty("counters").GetProperty(ActivityCategoryKeys.SecurityBlocked).GetInt32());
         Assert.Equal(1, body.GetProperty("counters").GetProperty(ActivityCategoryKeys.Failures).GetInt32());
         Assert.DoesNotContain("should-not-leak", payload, StringComparison.Ordinal);
 

@@ -114,17 +114,55 @@ public sealed class SqliteHarnessDatabase : IDisposable
 
     public IReadOnlyList<ActivityEvent> ReadActivityEventsBetween(DateTimeOffset startUtc, DateTimeOffset endUtc)
     {
+        var startMs = startUtc.ToUnixTimeMilliseconds();
+        var endMs = endUtc.ToUnixTimeMilliseconds();
         lock (syncRoot)
         {
             using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT id, timestamp, agent_id, realm, category, operation, target, status, duration_ms, metadata_json
                 FROM activity_events
-                WHERE timestamp >= $start AND timestamp < $end
-                ORDER BY timestamp ASC, id ASC;
+                WHERE timestamp_utc_ms >= $start_ms AND timestamp_utc_ms < $end_ms
+                ORDER BY timestamp_utc_ms ASC, id ASC;
                 """;
-            command.Parameters.AddWithValue("$start", startUtc.ToString("O"));
-            command.Parameters.AddWithValue("$end", endUtc.ToString("O"));
+            command.Parameters.AddWithValue("$start_ms", startMs);
+            command.Parameters.AddWithValue("$end_ms", endMs);
+            using var reader = command.ExecuteReader();
+            var events = new List<ActivityEvent>();
+            while (reader.Read())
+            {
+                events.Add(ReadActivityEvent(reader));
+            }
+
+            return events;
+        }
+    }
+
+    public IReadOnlyList<ActivityEvent> ReadRecentActivityEventsBetween(
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        int limit)
+    {
+        if (limit is < 1 or > ActivityQueryService.MaxFeedLimit)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        var startMs = startUtc.ToUnixTimeMilliseconds();
+        var endMs = endUtc.ToUnixTimeMilliseconds();
+        lock (syncRoot)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT id, timestamp, agent_id, realm, category, operation, target, status, duration_ms, metadata_json
+                FROM activity_events
+                WHERE timestamp_utc_ms >= $start_ms AND timestamp_utc_ms < $end_ms
+                ORDER BY timestamp_utc_ms DESC, id DESC
+                LIMIT $limit;
+                """;
+            command.Parameters.AddWithValue("$start_ms", startMs);
+            command.Parameters.AddWithValue("$end_ms", endMs);
+            command.Parameters.AddWithValue("$limit", limit);
             using var reader = command.ExecuteReader();
             var events = new List<ActivityEvent>();
             while (reader.Read())
@@ -149,15 +187,17 @@ public sealed class SqliteHarnessDatabase : IDisposable
 
     internal void InsertActivityEvent(SqliteTransaction transaction, ActivityEvent activityEvent)
     {
+        var utc = activityEvent.Timestamp.ToUniversalTime();
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO activity_events
-                (id, timestamp, agent_id, realm, category, operation, target, status, duration_ms, metadata_json)
-            VALUES ($id, $timestamp, $agent_id, $realm, $category, $operation, $target, $status, $duration_ms, $metadata_json);
+                (id, timestamp, timestamp_utc_ms, agent_id, realm, category, operation, target, status, duration_ms, metadata_json)
+            VALUES ($id, $timestamp, $timestamp_utc_ms, $agent_id, $realm, $category, $operation, $target, $status, $duration_ms, $metadata_json);
             """;
         command.Parameters.AddWithValue("$id", activityEvent.Id);
-        command.Parameters.AddWithValue("$timestamp", activityEvent.Timestamp.ToString("O"));
+        command.Parameters.AddWithValue("$timestamp", utc.ToString("O"));
+        command.Parameters.AddWithValue("$timestamp_utc_ms", utc.ToUnixTimeMilliseconds());
         command.Parameters.AddWithValue("$agent_id", (object?)activityEvent.AgentId ?? DBNull.Value);
         command.Parameters.AddWithValue("$realm", (object?)activityEvent.Realm ?? DBNull.Value);
         command.Parameters.AddWithValue("$category", activityEvent.Category);
@@ -251,6 +291,46 @@ public sealed class SqliteHarnessDatabase : IDisposable
 
             ApplyMigration(migration);
             appliedMigrations[migration.Version] = migration.Name;
+        }
+
+        BackfillActivityTimestampUtcMsIfNeeded();
+    }
+
+    private void BackfillActivityTimestampUtcMsIfNeeded()
+    {
+        lock (syncRoot)
+        {
+            using var check = connection.CreateCommand();
+            check.CommandText = "SELECT 1 FROM activity_events WHERE timestamp_utc_ms IS NULL LIMIT 1;";
+            if (check.ExecuteScalar() is null)
+            {
+                return;
+            }
+
+            using var select = connection.CreateCommand();
+            select.CommandText = "SELECT id, timestamp FROM activity_events WHERE timestamp_utc_ms IS NULL;";
+            using var reader = select.ExecuteReader();
+            var updates = new List<(string Id, long UtcMs, string UtcTimestamp)>();
+            while (reader.Read())
+            {
+                var utc = DateTimeOffset.Parse(reader.GetString(1)).ToUniversalTime();
+                updates.Add((reader.GetString(0), utc.ToUnixTimeMilliseconds(), utc.ToString("O")));
+            }
+
+            foreach (var (id, utcMs, utcTimestamp) in updates)
+            {
+                using var update = connection.CreateCommand();
+                update.CommandText = """
+                    UPDATE activity_events
+                    SET timestamp_utc_ms = $timestamp_utc_ms,
+                        timestamp = $timestamp
+                    WHERE id = $id;
+                    """;
+                update.Parameters.AddWithValue("$timestamp_utc_ms", utcMs);
+                update.Parameters.AddWithValue("$timestamp", utcTimestamp);
+                update.Parameters.AddWithValue("$id", id);
+                update.ExecuteNonQuery();
+            }
         }
     }
 

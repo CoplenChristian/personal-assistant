@@ -31,6 +31,23 @@ public static class ActivityRedaction
         "hash"
     };
 
+    private static readonly HashSet<string> AllowedMetadataKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "eventType",
+        "outcome",
+        "state",
+        "errorCode",
+        "desiredState",
+        "observedState",
+        "adopted",
+        "resumeAttempted",
+        "resumeFallback",
+        "scope",
+        "requiresRestart",
+        "keys",
+        "agentId"
+    };
+
     public static ActivityPublicEvent ToPublicEvent(ActivityEvent activityEvent)
     {
         ArgumentNullException.ThrowIfNull(activityEvent);
@@ -41,10 +58,20 @@ public static class ActivityRedaction
             activityEvent.Realm,
             activityEvent.Category,
             activityEvent.Operation,
-            activityEvent.Target,
+            RedactTarget(activityEvent.Target),
             activityEvent.Status,
             activityEvent.DurationMs,
             RedactMetadata(activityEvent.MetadataJson));
+    }
+
+    public static string? RedactTarget(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return target;
+        }
+
+        return SensitivePathPattern.IsMatch(target) ? "[redacted]" : target;
     }
 
     public static string RedactMetadata(string metadataJson)
@@ -68,20 +95,8 @@ public static class ActivityRedaction
                 writer.WriteStartObject();
                 foreach (var property in document.RootElement.EnumerateObject())
                 {
-                    if (SensitiveMetadataKeys.Contains(property.Name))
-                    {
-                        writer.WriteString(property.Name, "[redacted]");
-                        continue;
-                    }
-
-                    if (property.Value.ValueKind is JsonValueKind.String)
-                    {
-                        var value = property.Value.GetString() ?? string.Empty;
-                        writer.WriteString(property.Name, SensitivePathPattern.IsMatch(value) ? "[redacted]" : value);
-                        continue;
-                    }
-
-                    property.WriteTo(writer);
+                    writer.WritePropertyName(property.Name);
+                    WriteRedactedValue(writer, property.Value, property.Name);
                 }
 
                 writer.WriteEndObject();
@@ -92,6 +107,46 @@ public static class ActivityRedaction
         catch (JsonException)
         {
             return "{}";
+        }
+    }
+
+    private static void WriteRedactedValue(Utf8JsonWriter writer, JsonElement value, string propertyName)
+    {
+        if (SensitiveMetadataKeys.Contains(propertyName)
+            || !AllowedMetadataKeys.Contains(propertyName))
+        {
+            writer.WriteStringValue("[redacted]");
+            return;
+        }
+
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in value.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteRedactedValue(writer, property.Value, property.Name);
+                }
+
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in value.EnumerateArray())
+                {
+                    WriteRedactedValue(writer, item, propertyName);
+                }
+
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                var text = value.GetString() ?? string.Empty;
+                writer.WriteStringValue(SensitivePathPattern.IsMatch(text) ? "[redacted]" : text);
+                break;
+            default:
+                value.WriteTo(writer);
+                break;
         }
     }
 }

@@ -60,22 +60,36 @@ export function ActivityPanel({ api: providedApi }: ActivityPanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadActivity = useCallback(async () => {
+  const loadActivity = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getActivity();
+      const result = await api.getActivity(
+        signal !== undefined ? { signal } : undefined,
+      );
+      if (signal?.aborted) {
+        return;
+      }
+
       setSnapshot(result);
     } catch (loadError) {
+      if (signal?.aborted) {
+        return;
+      }
+
       setSnapshot(null);
       setError(errorMessage(loadError));
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [api]);
 
   useEffect(() => {
-    void loadActivity();
+    const controller = new AbortController();
+    void loadActivity(controller.signal);
+    return () => controller.abort();
   }, [loadActivity]);
 
   const localDayLabel = snapshot
@@ -142,10 +156,12 @@ export function ActivityPanel({ api: providedApi }: ActivityPanelProps) {
                     <li className="activity-feed__item" key={event.id}>
                       <div className="activity-feed__summary">
                         <span className="activity-feed__time">
-                          {new Date(event.timestamp).toLocaleTimeString(undefined, {
+                          {new Date(event.timestamp).toLocaleTimeString("en-US", {
                             hour: "2-digit",
                             minute: "2-digit",
                             second: "2-digit",
+                            timeZone: snapshot.timezone,
+                            hour12: true,
                           })}
                         </span>
                         <span className={status.className} role="status">

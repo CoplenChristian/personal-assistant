@@ -46,7 +46,12 @@ export interface ActivitySnapshot {
 }
 
 export interface ActivityApi {
-  getActivity(options?: { date?: string; timezone?: string; limit?: number }): Promise<ActivitySnapshot>;
+  getActivity(options?: {
+    date?: string;
+    timezone?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<ActivitySnapshot>;
 }
 
 interface ProblemDetailsPayload {
@@ -168,8 +173,14 @@ export function createActivityApi(fetcher: FetchLike = globalThis.fetch): Activi
 
       let response: Response;
       try {
-        response = await fetcher(url);
-      } catch {
+        response = await fetcher(
+          url,
+          options?.signal !== undefined ? { signal: options.signal } : {},
+        );
+      } catch (error) {
+        if (options?.signal?.aborted) {
+          throw error;
+        }
         throw new ActivityApiError(
           "The activity service is unreachable. Check that the server is running and try again.",
           { status: 0, code: "activity_unavailable" },

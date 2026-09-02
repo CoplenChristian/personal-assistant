@@ -62,7 +62,7 @@ public sealed class ActivityQueryServiceTests
         Assert.Equal(1, result.Counters[ActivityCategoryKeys.AgentStarts]);
         Assert.Equal(1, result.Counters[ActivityCategoryKeys.MemoryCheckpoints]);
         Assert.Equal(1, result.Counters[ActivityCategoryKeys.AgentClears]);
-        Assert.Equal(1, result.Counters[ActivityCategoryKeys.SecurityBlocked]);
+        Assert.Equal(0, result.Counters[ActivityCategoryKeys.SecurityBlocked]);
         Assert.Equal(2, result.RecentEvents.Count);
         Assert.Equal("newer", result.RecentEvents[0].Id);
         Assert.Equal("agent-clear-blocked", result.RecentEvents[1].Id);
@@ -95,6 +95,66 @@ public sealed class ActivityQueryServiceTests
         Assert.Equal(1, secondDay.Counters[ActivityCategoryKeys.AgentStarts]);
         Assert.Single(secondDay.RecentEvents);
         Assert.Equal("next-day", secondDay.RecentEvents[0].Id);
+    }
+
+    [Fact]
+    public void Query_respects_non_utc_offset_timestamps_for_local_day_boundaries()
+    {
+        using var fixture = CreateFixture();
+        var sink = new SqliteActivityEventSink(fixture.Database);
+        sink.Append(CreateEvent(
+            "offset-evening",
+            new DateTimeOffset(2026, 9, 1, 23, 30, 0, TimeSpan.FromHours(-4)),
+            "agents",
+            "start",
+            "success"));
+        sink.Append(CreateEvent(
+            "offset-next-day",
+            new DateTimeOffset(2026, 9, 2, 0, 30, 0, TimeSpan.FromHours(-4)),
+            "agents",
+            "start",
+            "success"));
+
+        var firstDay = fixture.Service.Query(new ActivityQueryRequest("2026-09-01", "America/New_York", null));
+        var secondDay = fixture.Service.Query(new ActivityQueryRequest("2026-09-02", "America/New_York", null));
+
+        Assert.Equal(1, firstDay.Counters[ActivityCategoryKeys.AgentStarts]);
+        Assert.Single(firstDay.RecentEvents);
+        Assert.Equal("offset-evening", firstDay.RecentEvents[0].Id);
+        Assert.Equal(1, secondDay.Counters[ActivityCategoryKeys.AgentStarts]);
+        Assert.Single(secondDay.RecentEvents);
+        Assert.Equal("offset-next-day", secondDay.RecentEvents[0].Id);
+    }
+
+    [Fact]
+    public void Query_applies_feed_limit_without_loading_more_than_requested_recent_events()
+    {
+        using var fixture = CreateFixture();
+        var sink = new SqliteActivityEventSink(fixture.Database);
+        for (var index = 0; index < 5; index++)
+        {
+            sink.Append(CreateEvent(
+                $"event-{index}",
+                new DateTimeOffset(2026, 9, 1, 8, index, 0, TimeSpan.Zero),
+                "agents",
+                "start",
+                "success"));
+        }
+
+        var result = fixture.Service.Query(new ActivityQueryRequest("2026-09-01", "UTC", 1));
+
+        Assert.Equal(5, result.Counters[ActivityCategoryKeys.AgentStarts]);
+        Assert.Single(result.RecentEvents);
+        Assert.Equal("event-4", result.RecentEvents[0].Id);
+    }
+
+    [Fact]
+    public void Query_rejects_out_of_range_dates()
+    {
+        using var fixture = CreateFixture();
+        var exception = Assert.Throws<ActivityQueryException>(() =>
+            fixture.Service.Query(new ActivityQueryRequest("9999-12-31", "UTC", null)));
+        Assert.Equal("activity_date_invalid", exception.Code);
     }
 
     [Fact]

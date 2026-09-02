@@ -105,6 +105,22 @@ describe("ActivityPanel", () => {
     await waitFor(() => expect(getActivity).toHaveBeenCalledTimes(2));
   });
 
+  it("formats event times using the activity timezone", async () => {
+    const baseEvent = snapshot.recentEvents[0]!;
+    const getActivity = vi.fn(async (): Promise<ActivitySnapshot> => ({
+      ...snapshot,
+      timezone: "America/New_York",
+      recentEvents: [{
+        ...baseEvent,
+        timestamp: "2026-09-01T18:00:00.000Z",
+      }],
+    }));
+    render(<ActivityPanel api={createMockApi(getActivity)} />);
+
+    expect(await screen.findByText("Local day 2026-09-01 (America/New_York)")).toBeInTheDocument();
+    expect(screen.getByText("02:00:00 PM")).toBeInTheDocument();
+  });
+
   it("surfaces load errors with a retry action", async () => {
     const getActivity = vi.fn(async () => {
       throw new Error("offline");

@@ -87,22 +87,22 @@ export function PersonalAgentPage() {
         </div>
       </div>
 
-      {status.runtimeHealthy ? (
-        <div className="agent-page__workspace">
+      <div className="agent-page__workspace">
+        {status.runtimeHealthy ? (
           <div className="agent-page__terminal-column">
             <StandardizedTerminalSurface scrollbackLines={scrollbackLines} />
             <SessionHygieneControls />
           </div>
-          <ActivityPanel />
-        </div>
-      ) : (
-        <section className="terminal-not-ready" aria-labelledby="terminal-not-ready-title">
-          <span className="eyebrow">OBSERVER STATUS</span>
-          <h2 id="terminal-not-ready-title">Start the personal agent to open its terminal.</h2>
-          <p>The workspace will hydrate from tmux once a healthy Claude process is present.</p>
-          <a className="button button--primary" href="/">Open lifecycle controls <span aria-hidden="true">↗</span></a>
-        </section>
-      )}
+        ) : (
+          <section className="terminal-not-ready" aria-labelledby="terminal-not-ready-title">
+            <span className="eyebrow">OBSERVER STATUS</span>
+            <h2 id="terminal-not-ready-title">Start the personal agent to open its terminal.</h2>
+            <p>The workspace will hydrate from tmux once a healthy Claude process is present.</p>
+            <a className="button button--primary" href="/">Open lifecycle controls <span aria-hidden="true">↗</span></a>
+          </section>
+        )}
+        <ActivityPanel />
+      </div>
     </section>
   );
 }

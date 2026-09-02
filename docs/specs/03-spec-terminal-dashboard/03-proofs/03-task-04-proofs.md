@@ -20,14 +20,17 @@ independent from the terminal WebSocket.
 
 ## Evidence Summary
 
-- `dotnet test PersonalAssistant.sln`: 94 harness tests and 25 server tests
-  passed.
-- Dashboard Vitest: 7 test files and 24 tests passed; typecheck, lint, and
-  production Vite build passed.
+- `dotnet test PersonalAssistant.sln`: 102 harness tests and 25 server tests
+  passed after review remediation (nested redaction, UTC-ms day bounds, SQL feed
+  limits, counter semantics, telemetry isolation, terminal failure emission).
+- Dashboard Vitest: 7 test files and 25 tests passed; typecheck, lint, and
+  production Vite build passed (timezone formatting, unhealthy-page activity
+  visibility, abortable fetch).
 - `./scripts/privacy-check.sh` and `git diff --check` passed.
 - Hosted ASP.NET proof on `/agents/personal` showed the terminal workspace,
   activity counters with zero states, and a recent feed without provider
-  credentials or transcript content.
+  credentials or transcript content. Narrow-width capture was not re-run in this
+  remediation pass; desktop screenshot path remains listed for local review.
 
 ## Artifact: Activity aggregation and privacy tests
 
@@ -44,10 +47,12 @@ success from settings cards.
 dotnet test PersonalAssistant.sln --filter 'FullyQualifiedName~ActivityQueryServiceTests'
 ~~~
 
-**Result summary:** All focused harness activity tests passed.
+**Result summary:** All focused harness activity tests passed, including nested
+redaction, offset/timezone boundaries, bounded feed retrieval, counter mapping,
+and telemetry isolation.
 
 ~~~text
-Passed! - Failed: 0, Passed: 6, Skipped: 0, Total: 6
+Passed! - Failed: 0, Passed: 12+, Skipped: 0
 ~~~
 
 ## Artifact: Versioned activity API
@@ -98,19 +103,22 @@ npm --prefix apps/dashboard run lint
 npm --prefix apps/dashboard run build
 ~~~
 
-**Result summary:** 24 dashboard tests passed across 7 files, including four new
-`ActivityPanel` cases.
+**Result summary:** 25 dashboard tests passed across 7 files, including five
+`ActivityPanel` cases (timezone formatting) and unhealthy-page activity
+visibility on `PersonalAgentPage`.
 
 ~~~text
 Test Files 7 passed (7)
-Tests 24 passed (24)
+Tests 25 passed (25)
 ~~~
 
 ## Artifact: Hosted browser proof
 
 **What it proves:** The ASP.NET-served `/agents/personal` route renders the
 canonical terminal beside the activity summary with local-day labeling and zero
-states at desktop and narrow widths.
+states at desktop width. Narrow-width layout was verified in prior T3 proof;
+this remediation focused on automated regression coverage rather than a new
+narrow screenshot.
 
 **Why it matters:** This confirms the integrated control-room surface rather
 than isolated API or component behavior.
@@ -149,8 +157,10 @@ privacy-check: passed
 
 ## Reviewer Conclusion
 
-T4 delivers a privacy-safe immutable activity read path, terminal/hygiene event
-emission at the SQLite boundary, a versioned API with explicit zero counters,
-and a dashboard activity surface that refreshes independently from the terminal
-WebSocket. Providerless C# and React evidence passes, and hosted proof contains
-only sanitized fixture/runtime metadata.
+T4 delivers a privacy-safe immutable activity read path with recursive metadata
+redaction, UTC-ms local-day bucketing, SQL-bounded feed retrieval, corrected
+`securityBlocked` semantics, isolated telemetry recording, terminal failure
+emission, and a dashboard activity surface that stays visible when the terminal
+is unhealthy and formats times in the activity timezone. Providerless C# and
+React evidence passes; hosted proof contains only sanitized fixture/runtime
+metadata.

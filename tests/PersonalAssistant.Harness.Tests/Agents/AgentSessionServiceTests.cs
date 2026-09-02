@@ -26,7 +26,7 @@ public sealed class AgentSessionServiceTests
             versions.Add(reader.GetInt32(0));
         }
 
-        Assert.Equal([1, 2], versions);
+        Assert.Equal([1, 2, 3], versions);
     }
 
     [Fact]

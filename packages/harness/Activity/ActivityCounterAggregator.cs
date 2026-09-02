@@ -29,11 +29,6 @@ public static class ActivityCounterAggregator
             yield return ActivityCategoryKeys.Failures;
         }
 
-        if (string.Equals(activityEvent.Status, "blocked", StringComparison.OrdinalIgnoreCase))
-        {
-            yield return ActivityCategoryKeys.SecurityBlocked;
-        }
-
         switch (activityEvent.Category, activityEvent.Operation)
         {
             case ("prompts", "deliver"):

@@ -10,6 +10,10 @@ vi.mock("../src/features/agents/StandardizedTerminalSurface", () => ({
   ),
 }));
 
+vi.mock("../src/features/agents/ActivityPanel", () => ({
+  ActivityPanel: () => <div role="region" aria-label="Harness activity">Harness activity panel</div>,
+}));
+
 const baseStatus: AgentStatus = {
   contractVersion: "phase-0b-agents.v1",
   id: "personal",
@@ -64,6 +68,7 @@ describe("PersonalAgentPage", () => {
     render(<PersonalAgentPage />);
 
     expect(await screen.findByRole("heading", { name: "Start the personal agent to open its terminal." })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Harness activity" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open lifecycle controls/i })).toHaveAttribute("href", "/");
   });
 });

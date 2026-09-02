@@ -222,26 +222,35 @@ public sealed class SqliteHarnessDatabase : IDisposable
 
     internal void InsertActivityEvent(SqliteTransaction transaction, ActivityEvent activityEvent)
     {
-        var utc = activityEvent.Timestamp.ToUniversalTime();
-        using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            INSERT INTO activity_events
-                (id, timestamp, timestamp_utc_ms, agent_id, realm, category, operation, target, status, duration_ms, metadata_json)
-            VALUES ($id, $timestamp, $timestamp_utc_ms, $agent_id, $realm, $category, $operation, $target, $status, $duration_ms, $metadata_json);
-            """;
-        command.Parameters.AddWithValue("$id", activityEvent.Id);
-        command.Parameters.AddWithValue("$timestamp", utc.ToString("O"));
-        command.Parameters.AddWithValue("$timestamp_utc_ms", utc.ToUnixTimeMilliseconds());
-        command.Parameters.AddWithValue("$agent_id", (object?)activityEvent.AgentId ?? DBNull.Value);
-        command.Parameters.AddWithValue("$realm", (object?)activityEvent.Realm ?? DBNull.Value);
-        command.Parameters.AddWithValue("$category", activityEvent.Category);
-        command.Parameters.AddWithValue("$operation", activityEvent.Operation);
-        command.Parameters.AddWithValue("$target", (object?)activityEvent.Target ?? DBNull.Value);
-        command.Parameters.AddWithValue("$status", activityEvent.Status);
-        command.Parameters.AddWithValue("$duration_ms", (object?)activityEvent.DurationMs ?? DBNull.Value);
-        command.Parameters.AddWithValue("$metadata_json", activityEvent.MetadataJson);
-        command.ExecuteNonQuery();
+        ArgumentNullException.ThrowIfNull(activityEvent);
+        try
+        {
+            var utc = activityEvent.Timestamp.ToUniversalTime();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO activity_events
+                    (id, timestamp, timestamp_utc_ms, agent_id, realm, category, operation, target, status, duration_ms, metadata_json)
+                VALUES ($id, $timestamp, $timestamp_utc_ms, $agent_id, $realm, $category, $operation, $target, $status, $duration_ms, $metadata_json);
+                """;
+            command.Parameters.AddWithValue("$id", activityEvent.Id);
+            command.Parameters.AddWithValue("$timestamp", utc.ToString("O"));
+            command.Parameters.AddWithValue("$timestamp_utc_ms", utc.ToUnixTimeMilliseconds());
+            command.Parameters.AddWithValue("$agent_id", (object?)activityEvent.AgentId ?? DBNull.Value);
+            command.Parameters.AddWithValue("$realm", (object?)activityEvent.Realm ?? DBNull.Value);
+            command.Parameters.AddWithValue("$category", activityEvent.Category);
+            command.Parameters.AddWithValue("$operation", activityEvent.Operation);
+            command.Parameters.AddWithValue("$target", (object?)activityEvent.Target ?? DBNull.Value);
+            command.Parameters.AddWithValue("$status", activityEvent.Status);
+            command.Parameters.AddWithValue("$duration_ms", (object?)activityEvent.DurationMs ?? DBNull.Value);
+            command.Parameters.AddWithValue("$metadata_json", activityEvent.MetadataJson);
+            command.ExecuteNonQuery();
+        }
+        catch
+        {
+            ActivityTelemetry.RecordFailure();
+            throw;
+        }
     }
 
     private static ActivityEvent ReadActivityEvent(Microsoft.Data.Sqlite.SqliteDataReader reader) =>

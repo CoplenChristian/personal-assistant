@@ -21,9 +21,10 @@ independent from the terminal WebSocket.
 
 ## Evidence Summary
 
-- `dotnet test PersonalAssistant.sln`: 104 harness tests and 26 server tests
-  passed after second-pass remediation (bounded counter reads, `auditDegraded`
-  contract, migration 003 upgrade path, lower date bounds, abortable refresh).
+- `dotnet test PersonalAssistant.sln`: 105 harness tests and 26 server tests
+  passed after second-pass remediation (bounded counter reads, centralized
+  `auditDegraded` on all SQLite activity writes, migration 003 upgrade path,
+  lower date bounds, abortable refresh).
 - Dashboard Vitest: 7 test files and 26 tests passed; typecheck, lint, and
   production Vite build passed.
 - `./scripts/privacy-check.sh` and `git diff --check` passed.
@@ -51,7 +52,7 @@ dotnet test tests/PersonalAssistant.Harness.Tests/PersonalAssistant.Harness.Test
 **Result summary:** All harness activity tests passed across five test classes.
 
 ~~~text
-Passed! - Failed: 0, Passed: 16, Skipped: 0, Total: 16
+Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17
 ~~~
 
 ## Artifact: Versioned activity API
@@ -150,5 +151,8 @@ redaction, UTC-ms local-day bucketing, SQL-bounded feed retrieval and counter
 aggregation, corrected `securityBlocked` semantics, isolated telemetry recording
 with `auditDegraded` surfacing, terminal failure emission, and a dashboard
 activity surface that stays visible when the terminal is unhealthy and formats
-times in the activity timezone. Providerless C# and React evidence passes;
-hosted proof contains only sanitized fixture/runtime metadata.
+times in the activity timezone. Activity recording failures are tracked at the
+SQLite `InsertActivityEvent` boundary so lifecycle, hygiene, checkpoint, settings,
+and terminal writers share one degradation signal. Providerless C# and React
+evidence passes; hosted proof contains only sanitized fixture/runtime metadata.
+Narrow-width layout remains unverified for T4 and should be tracked in Phase 4.

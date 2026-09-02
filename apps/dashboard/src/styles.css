@@ -745,7 +745,7 @@ a:focus-visible {
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line));
   background: color-mix(in srgb, var(--amber) 12%, var(--panel-raised));
-  color: var(--text);
+  color: var(--cream);
   font-size: 0.92rem;
 }
 

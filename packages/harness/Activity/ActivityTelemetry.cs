@@ -18,6 +18,11 @@ public static class ActivityTelemetry
         Volatile.Write(ref failedRecordCount, 0);
     }
 
+    public static void RecordFailure()
+    {
+        Interlocked.Increment(ref failedRecordCount);
+    }
+
     public static void TryRecord(IActivityEventSink sink, ActivityEvent activityEvent)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -29,7 +34,8 @@ public static class ActivityTelemetry
         }
         catch
         {
-            Interlocked.Increment(ref failedRecordCount);
+            // SQLite-backed sinks record failures in InsertActivityEvent; swallow so
+            // terminal input and other request paths stay available.
         }
     }
 }

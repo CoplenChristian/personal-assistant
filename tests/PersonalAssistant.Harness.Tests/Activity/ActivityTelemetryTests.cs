@@ -43,6 +43,20 @@ public sealed class ActivityTelemetryTests
         Assert.True(result.AuditDegraded);
     }
 
+    [Fact]
+    public void InsertActivityEvent_failure_marks_audit_degraded_for_all_writers()
+    {
+        ActivityTelemetry.ResetForTests();
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+        var database = new PersonalAssistant.Harness.Persistence.SqliteHarnessDatabase(connection);
+        var sink = new PersonalAssistant.Harness.Persistence.SqliteActivityEventSink(database);
+        var duplicateEvent = CreateEvent();
+        sink.Append(duplicateEvent);
+
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => sink.Append(duplicateEvent));
+        Assert.True(ActivityTelemetry.RecordingDegraded);
+    }
+
     private static ActivityEvent CreateEvent() =>
         new(
             "event",
@@ -63,6 +77,7 @@ public sealed class ActivityTelemetryTests
         public void Append(ActivityEvent activityEvent)
         {
             Attempts++;
+            ActivityTelemetry.RecordFailure();
             throw new InvalidOperationException("telemetry unavailable");
         }
     }

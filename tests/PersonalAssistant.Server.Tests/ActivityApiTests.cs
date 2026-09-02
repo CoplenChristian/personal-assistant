@@ -136,8 +136,11 @@ public sealed class ActivityApiTests
 
     private sealed class ThrowingActivitySink : IActivityEventSink
     {
-        public void Append(ActivityEvent activityEvent) =>
+        public void Append(ActivityEvent activityEvent)
+        {
+            ActivityTelemetry.RecordFailure();
             throw new InvalidOperationException("telemetry unavailable");
+        }
     }
 }
 

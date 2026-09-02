@@ -121,10 +121,10 @@ without changing the harness or adding a model API abstraction.
 
 Acceptance gate:
 
-- [ ] A configured work agent launches the native codex CLI in its own prefixed tmux session.
-- [ ] Claude and Codex use the same lifecycle contract.
-- [ ] Runtime-specific behavior remains behind adapters.
-- [ ] Cross-realm and capability policy behavior is unchanged.
+- [x] A configured work agent launches the native codex CLI in its own prefixed tmux session.
+- [x] Claude and Codex use the same lifecycle contract.
+- [x] Runtime-specific behavior remains behind adapters.
+- [x] Cross-realm and capability policy behavior is unchanged.
 
 ## Phase 0E — Dynamic agents and roster
 

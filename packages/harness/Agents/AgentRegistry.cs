@@ -16,12 +16,16 @@ public sealed class AgentRegistry
         this.tmuxPrefix = tmuxPrefix;
     }
 
-    public AgentDefinition LoadPersonal()
+    public AgentDefinition LoadPersonal() => LoadReviewed("personal", "claude", "personal");
+
+    public AgentDefinition LoadWork() => LoadReviewed("work", "codex", "work");
+
+    public AgentDefinition LoadReviewed(string expectedId, string expectedRuntime, string expectedRealm)
     {
-        var path = Path.Combine(repositoryRoot, "agents", "personal", "agent.yaml");
+        var path = Path.Combine(repositoryRoot, "agents", expectedId, "agent.yaml");
         if (!File.Exists(path))
         {
-            throw new AgentConfigurationException("The reviewed personal agent definition is missing.");
+            throw new AgentConfigurationException($"The reviewed {expectedId} agent definition is missing.");
         }
 
         try
@@ -31,31 +35,36 @@ public sealed class AgentRegistry
                 .IgnoreUnmatchedProperties()
                 .Build();
             var manifest = deserializer.Deserialize<AgentManifest>(File.ReadAllText(path))
-                ?? throw new AgentConfigurationException("The personal agent definition is empty.");
+                ?? throw new AgentConfigurationException($"The {expectedId} agent definition is empty.");
 
             ValidateIdentity(manifest.Id);
-            if (!string.Equals(manifest.Id, "personal", StringComparison.Ordinal))
+            if (!string.Equals(manifest.Id, expectedId, StringComparison.Ordinal))
             {
-                throw new AgentConfigurationException("The reviewed personal agent definition must use id personal.");
+                throw new AgentConfigurationException($"The reviewed {expectedId} agent definition must use id {expectedId}.");
             }
 
             if (string.IsNullOrWhiteSpace(manifest.Name))
             {
-                throw new AgentConfigurationException("The personal agent definition requires a name.");
+                throw new AgentConfigurationException($"The {expectedId} agent definition requires a name.");
             }
 
-            if (manifest.Runtime is not ("claude" or "codex"))
+            if (!string.Equals(manifest.Runtime, expectedRuntime, StringComparison.Ordinal))
             {
-                throw new AgentConfigurationException("The personal agent runtime must be claude or codex.");
+                throw new AgentConfigurationException($"The reviewed {expectedId} agent runtime must be {expectedRuntime}.");
             }
 
             var workingDirectory = ResolveWorkingDirectory(manifest.WorkingDirectory);
             if (!Directory.Exists(workingDirectory))
             {
-                throw new AgentConfigurationException("The personal agent working directory does not exist.");
+                throw new AgentConfigurationException($"The {expectedId} agent working directory does not exist.");
             }
 
             var realms = ValidateList(manifest.Realms, "realm");
+            if (!realms.Contains(expectedRealm, StringComparer.Ordinal))
+            {
+                throw new AgentConfigurationException($"The reviewed {expectedId} agent definition must include the {expectedRealm} realm.");
+            }
+
             var skills = ValidateList(manifest.Skills, "skill");
             var scheduledPermissions = ValidateList(manifest.ScheduledTaskPermissions, "scheduled permission", allowEmpty: true);
             var sessionName = tmuxPrefix + manifest.Id;
@@ -81,7 +90,7 @@ public sealed class AgentRegistry
         }
         catch (Exception exception)
         {
-            throw new AgentConfigurationException($"Unable to load the personal agent definition: {exception.Message}");
+            throw new AgentConfigurationException($"Unable to load the {expectedId} agent definition: {exception.Message}");
         }
     }
 

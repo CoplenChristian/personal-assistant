@@ -386,6 +386,24 @@ public sealed class AgentSessionServiceTests
         Assert.True(SystemNativeProcessInspector.IsExpectedExecutable("/usr/local/bin/claude", "claude --resume reference", "claude"));
     }
 
+    [Fact]
+    public void Runtime_adapter_resolver_selects_claude_and_codex_adapters()
+    {
+        var tmux = new FakeTmuxExecutor();
+        var tmuxManager = new TmuxSessionManager("test-pa-", tmux, new FakeProcessInspector(tmux));
+        var claude = new ClaudeRuntimeAdapter(tmuxManager);
+        var codex = new CodexRuntimeAdapter(tmuxManager);
+        var resolver = new RuntimeAdapterResolver(
+        [
+            new KeyValuePair<string, IAgentRuntimeAdapter>("claude", claude),
+            new KeyValuePair<string, IAgentRuntimeAdapter>("codex", codex)
+        ]);
+
+        Assert.Same(claude, resolver.Resolve("claude"));
+        Assert.Same(codex, resolver.Resolve("codex"));
+        Assert.Throws<AgentLifecycleException>(() => resolver.Resolve("unknown"));
+    }
+
     private static string FindRepositoryRoot()
     {
         var current = new DirectoryInfo(Directory.GetCurrentDirectory());
@@ -414,11 +432,17 @@ public sealed class AgentSessionServiceTests
             Definition = new AgentRegistry(RepositoryRoot, "test-pa-").LoadPersonal();
             Tmux = new FakeTmuxExecutor();
             TmuxManager = new TmuxSessionManager("test-pa-", Tmux, new FakeProcessInspector(Tmux));
+            var claude = new ClaudeRuntimeAdapter(TmuxManager);
+            var runtimeAdapters = new RuntimeAdapterResolver(
+            [
+                new KeyValuePair<string, IAgentRuntimeAdapter>("claude", claude),
+                new KeyValuePair<string, IAgentRuntimeAdapter>("codex", new CodexRuntimeAdapter(TmuxManager))
+            ]);
             Service = new AgentSessionService(
                 new AgentRegistry(RepositoryRoot, "test-pa-"),
                 Store,
                 TmuxManager,
-                new ClaudeRuntimeAdapter(TmuxManager));
+                runtimeAdapters);
         }
 
         public string RepositoryRoot { get; }
@@ -493,12 +517,12 @@ public sealed class AgentSessionServiceTests
 
         private TmuxCommandResult LaunchProcess(IReadOnlyList<string> arguments)
         {
-            if (FailResume && arguments.Contains("--resume", StringComparer.Ordinal))
+            if (FailResume && IsResumeLaunch(arguments))
             {
                 return new TmuxCommandResult(1, string.Empty, "resume unavailable");
             }
 
-            if (ResumeProcessExits && arguments.Contains("--resume", StringComparer.Ordinal))
+            if (ResumeProcessExits && IsResumeLaunch(arguments))
             {
                 NativeProcess = false;
                 PaneDead = true;
@@ -513,8 +537,21 @@ public sealed class AgentSessionServiceTests
                 PaneStartCommand = arguments[separator + 1];
             }
 
-            PaneCurrentCommand = PaneStartCommand == "claude" ? "claude" : PaneStartCommand;
+            PaneCurrentCommand = PaneStartCommand is "claude" or "codex" ? PaneStartCommand : PaneStartCommand;
             return new TmuxCommandResult(0, string.Empty, string.Empty);
+        }
+
+        private static bool IsResumeLaunch(IReadOnlyList<string> arguments)
+        {
+            if (arguments.Contains("--resume", StringComparer.Ordinal))
+            {
+                return true;
+            }
+
+            var separator = arguments.ToList().IndexOf("--");
+            return separator >= 0
+                && separator + 2 < arguments.Count
+                && string.Equals(arguments[separator + 2], "resume", StringComparison.Ordinal);
         }
 
         private TmuxCommandResult KillSession()

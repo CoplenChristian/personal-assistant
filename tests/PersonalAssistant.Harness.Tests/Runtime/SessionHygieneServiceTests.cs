@@ -197,7 +197,7 @@ public sealed class SessionHygieneServiceTests
         public Exception? Failure { get; set; }
         public string WorkingDirectory { get; } = workingDirectory;
 
-        public ClaudeStartResult Start(AgentDefinition agent, PersistedSession session) => throw new NotSupportedException();
+        public RuntimeStartResult Start(AgentDefinition agent, PersistedSession session) => throw new NotSupportedException();
 
         public TmuxHealth GetStatus(AgentDefinition agent, PersistedSession session)
         {
@@ -206,7 +206,7 @@ public sealed class SessionHygieneServiceTests
             return new TmuxHealth(true, true, SessionObservedState.Running, null);
         }
 
-        public ClaudeResumeResult TryResume(AgentDefinition agent, PersistedSession session) => throw new NotSupportedException();
+        public RuntimeResumeResult TryResume(AgentDefinition agent, PersistedSession session) => throw new NotSupportedException();
 
         public void StartNewConversation(AgentDefinition agent, PersistedSession session) => throw new NotSupportedException();
 

@@ -39,4 +39,36 @@ public sealed class AgentApiTests
         Assert.Equal("exited", body.GetProperty("observedState").GetString());
         Assert.False(body.GetProperty("sessionDetected").GetBoolean());
     }
+
+    [Fact]
+    public async Task Get_work_returns_codex_runtime_and_work_session_name()
+    {
+        using var factory = new SettingsApiFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/agents/work");
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("work", body.GetProperty("id").GetString());
+        Assert.Equal("codex", body.GetProperty("runtime").GetString());
+        Assert.Equal("test-pa-work", body.GetProperty("tmuxSessionName").GetString());
+        Assert.Equal("stopped", body.GetProperty("desiredState").GetString());
+    }
+
+    [Fact]
+    public async Task Stop_work_is_idempotent_and_preserves_work_identity()
+    {
+        using var factory = new SettingsApiFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync("/api/agents/work/stop", content: null);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("work", body.GetProperty("id").GetString());
+        Assert.Equal("codex", body.GetProperty("runtime").GetString());
+        Assert.Equal("stopped", body.GetProperty("desiredState").GetString());
+        Assert.Equal("exited", body.GetProperty("observedState").GetString());
+    }
 }

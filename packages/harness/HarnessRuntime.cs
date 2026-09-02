@@ -92,7 +92,13 @@ public sealed class HarnessRuntime : IDisposable
             var agentStore = new SqliteAgentSessionStore(database);
             var tmux = new TmuxSessionManager(bootstrap.TmuxPrefix);
             var claude = new ClaudeRuntimeAdapter(tmux);
-            var agents = new AgentSessionService(registry, agentStore, tmux, claude);
+            var codex = new CodexRuntimeAdapter(tmux);
+            var runtimeAdapters = new RuntimeAdapterResolver(
+            [
+                new KeyValuePair<string, IAgentRuntimeAdapter>("claude", claude),
+                new KeyValuePair<string, IAgentRuntimeAdapter>("codex", codex)
+            ]);
+            var agents = new AgentSessionService(registry, agentStore, tmux, runtimeAdapters);
             var activitySink = new SqliteActivityEventSink(database);
             var activityQuery = new ActivityQueryService(database);
             var checkpointCoordinator = new CheckpointCoordinator(root, bootstrap.RuntimeDirectory, activitySink);

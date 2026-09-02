@@ -15,6 +15,16 @@ public interface IAgentSessionService
     AgentStatus StopPersonal();
 
     void RecordPersonalConversationReference(string reference);
+
+    AgentStatus GetWork();
+
+    AgentStatus ReconcileWork();
+
+    AgentStatus StartWork();
+
+    AgentStatus StopWork();
+
+    void RecordWorkConversationReference(string reference);
 }
 
 public sealed class AgentSessionService : IAgentSessionService
@@ -22,26 +32,26 @@ public sealed class AgentSessionService : IAgentSessionService
     private readonly AgentRegistry registry;
     private readonly IAgentSessionStore store;
     private readonly TmuxSessionManager tmux;
-    private readonly IClaudeRuntimeAdapter claude;
+    private readonly IRuntimeAdapterResolver runtimeAdapters;
     private readonly object lifecycleLock = new();
 
     public AgentSessionService(
         AgentRegistry registry,
         IAgentSessionStore store,
         TmuxSessionManager tmux,
-        IClaudeRuntimeAdapter claude)
+        IRuntimeAdapterResolver runtimeAdapters)
     {
         this.registry = registry;
         this.store = store;
         this.tmux = tmux;
-        this.claude = claude;
+        this.runtimeAdapters = runtimeAdapters;
     }
 
     public AgentStatus GetPersonal()
     {
         lock (lifecycleLock)
         {
-            return GetPersonalCore();
+            return GetCore(LoadLaunchablePersonal());
         }
     }
 
@@ -49,7 +59,7 @@ public sealed class AgentSessionService : IAgentSessionService
     {
         lock (lifecycleLock)
         {
-            return ReconcilePersonalCore();
+            return ReconcileCore(LoadLaunchablePersonal());
         }
     }
 
@@ -57,7 +67,7 @@ public sealed class AgentSessionService : IAgentSessionService
     {
         lock (lifecycleLock)
         {
-            return StartPersonalCore();
+            return StartCore(LoadLaunchablePersonal());
         }
     }
 
@@ -65,7 +75,7 @@ public sealed class AgentSessionService : IAgentSessionService
     {
         lock (lifecycleLock)
         {
-            return StopPersonalCore();
+            return StopCore(LoadLaunchablePersonal());
         }
     }
 
@@ -73,27 +83,72 @@ public sealed class AgentSessionService : IAgentSessionService
     {
         lock (lifecycleLock)
         {
-            var definition = LoadLaunchablePersonal();
-            var status = store.EnsureAgent(definition);
-            var normalized = claude.RecordConversationReference(definition, status.Session, reference);
-            store.RecordConversationReference(definition.Id, normalized);
+            RecordConversationReferenceCore(LoadLaunchablePersonal(), reference);
         }
     }
 
-    private AgentStatus GetPersonalCore()
+    public AgentStatus GetWork()
     {
-        var definition = LoadLaunchablePersonal();
+        lock (lifecycleLock)
+        {
+            return GetCore(LoadLaunchableWork());
+        }
+    }
+
+    public AgentStatus ReconcileWork()
+    {
+        lock (lifecycleLock)
+        {
+            return ReconcileCore(LoadLaunchableWork());
+        }
+    }
+
+    public AgentStatus StartWork()
+    {
+        lock (lifecycleLock)
+        {
+            return StartCore(LoadLaunchableWork());
+        }
+    }
+
+    public AgentStatus StopWork()
+    {
+        lock (lifecycleLock)
+        {
+            return StopCore(LoadLaunchableWork());
+        }
+    }
+
+    public void RecordWorkConversationReference(string reference)
+    {
+        lock (lifecycleLock)
+        {
+            RecordConversationReferenceCore(LoadLaunchableWork(), reference);
+        }
+    }
+
+    private void RecordConversationReferenceCore(AgentDefinition definition, string reference)
+    {
+        var adapter = runtimeAdapters.Resolve(definition.Runtime);
         var status = store.EnsureAgent(definition);
-        var health = claude.GetStatus(definition, status.Session);
+        var normalized = adapter.RecordConversationReference(definition, status.Session, reference);
+        store.RecordConversationReference(definition.Id, normalized);
+    }
+
+    private AgentStatus GetCore(AgentDefinition definition)
+    {
+        var adapter = runtimeAdapters.Resolve(definition.Runtime);
+        var status = store.EnsureAgent(definition);
+        var health = adapter.GetStatus(definition, status.Session);
         return PersistObservation(definition, health, null);
     }
 
-    private AgentStatus ReconcilePersonalCore()
+    private AgentStatus ReconcileCore(AgentDefinition definition)
     {
-        var definition = LoadLaunchablePersonal();
+        var adapter = runtimeAdapters.Resolve(definition.Runtime);
         var status = store.EnsureAgent(definition);
-        var health = claude.GetStatus(definition, status.Session);
-        var startResult = (ClaudeStartResult?)null;
+        var health = adapter.GetStatus(definition, status.Session);
+        var startResult = (RuntimeStartResult?)null;
         var adopted = health.RuntimeHealthy;
 
         if (!health.RuntimeHealthy
@@ -104,17 +159,17 @@ public sealed class AgentSessionService : IAgentSessionService
             {
                 tmux.EnsureSession(definition.TmuxSessionName, definition.WorkingDirectory);
                 status = store.RecordObservation(definition, SessionObservedState.Starting, null, null);
-                startResult = claude.Start(definition, status.Session);
-                health = claude.GetStatus(definition, status.Session);
+                startResult = adapter.Start(definition, status.Session);
+                health = adapter.GetStatus(definition, status.Session);
                 if (!health.RuntimeHealthy && startResult.ResumeAttempted && !startResult.StartedNewConversation)
                 {
-                    claude.StartNewConversation(definition, status.Session);
+                    adapter.StartNewConversation(definition, status.Session);
                     startResult = startResult with { StartedNewConversation = true };
-                    health = claude.GetStatus(definition, status.Session);
+                    health = adapter.GetStatus(definition, status.Session);
                 }
                 if (!health.RuntimeHealthy)
                 {
-                    health = new TmuxHealth(true, false, SessionObservedState.Error, "The Claude process did not become healthy.");
+                    health = new TmuxHealth(true, false, SessionObservedState.Error, "The native runtime did not become healthy.");
                 }
             }
             catch (Exception exception) when (IsRuntimeFailure(exception))
@@ -144,13 +199,13 @@ public sealed class AgentSessionService : IAgentSessionService
         return PersistObservation(definition, health, activity, status.DesiredState);
     }
 
-    private AgentStatus StartPersonalCore()
+    private AgentStatus StartCore(AgentDefinition definition)
     {
-        var definition = LoadLaunchablePersonal();
+        var adapter = runtimeAdapters.Resolve(definition.Runtime);
         var status = store.EnsureAgent(definition);
         store.SetDesiredState(definition.Id, AgentDesiredState.Running);
         status = store.ReadStatus(definition);
-        var health = claude.GetStatus(definition, status.Session);
+        var health = adapter.GetStatus(definition, status.Session);
 
         if (health.RuntimeHealthy)
         {
@@ -175,17 +230,17 @@ public sealed class AgentSessionService : IAgentSessionService
 
             tmux.EnsureSession(definition.TmuxSessionName, definition.WorkingDirectory);
             status = store.RecordObservation(definition, SessionObservedState.Starting, null, null);
-            var startResult = claude.Start(definition, status.Session);
-            health = claude.GetStatus(definition, status.Session);
+            var startResult = adapter.Start(definition, status.Session);
+            health = adapter.GetStatus(definition, status.Session);
             if (!health.RuntimeHealthy && startResult.ResumeAttempted && !startResult.StartedNewConversation)
             {
-                claude.StartNewConversation(definition, status.Session);
+                adapter.StartNewConversation(definition, status.Session);
                 startResult = startResult with { StartedNewConversation = true };
-                health = claude.GetStatus(definition, status.Session);
+                health = adapter.GetStatus(definition, status.Session);
             }
             if (!health.RuntimeHealthy)
             {
-                throw new AgentLifecycleException("agent_start_failed", "The Claude process did not become healthy after launch.");
+                throw new AgentLifecycleException("agent_start_failed", "The native runtime did not become healthy after launch.");
             }
 
             var activity = ActivityEvent.AgentLifecycle(
@@ -217,17 +272,17 @@ public sealed class AgentSessionService : IAgentSessionService
         }
     }
 
-    private AgentStatus StopPersonalCore()
+    private AgentStatus StopCore(AgentDefinition definition)
     {
-        var definition = LoadLaunchablePersonal();
+        var adapter = runtimeAdapters.Resolve(definition.Runtime);
         var status = store.EnsureAgent(definition);
-        var health = claude.GetStatus(definition, status.Session);
+        var health = adapter.GetStatus(definition, status.Session);
 
         try
         {
             if (health.SessionDetected)
             {
-                claude.Stop(definition, status.Session);
+                adapter.Stop(definition, status.Session);
             }
         }
         catch (Exception exception) when (IsRuntimeFailure(exception))
@@ -275,7 +330,18 @@ public sealed class AgentSessionService : IAgentSessionService
         var definition = registry.LoadPersonal();
         if (!string.Equals(definition.Runtime, "claude", StringComparison.Ordinal))
         {
-            throw new AgentLifecycleException("agent_runtime_unavailable", "Only the Claude runtime is available in Phase 0B.");
+            throw new AgentLifecycleException("agent_runtime_unavailable", "Only the Claude runtime is available for the personal agent.");
+        }
+
+        return definition;
+    }
+
+    private AgentDefinition LoadLaunchableWork()
+    {
+        var definition = registry.LoadWork();
+        if (!string.Equals(definition.Runtime, "codex", StringComparison.Ordinal))
+        {
+            throw new AgentLifecycleException("agent_runtime_unavailable", "Only the Codex runtime is available for the work agent.");
         }
 
         return definition;
@@ -322,6 +388,7 @@ public sealed class AgentSessionService : IAgentSessionService
         }
 
         if (error.Contains("Claude", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("Codex", StringComparison.OrdinalIgnoreCase)
             || error.Contains("native", StringComparison.OrdinalIgnoreCase))
         {
             return "native_runtime_unhealthy";

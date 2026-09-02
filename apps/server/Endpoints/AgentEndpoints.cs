@@ -43,6 +43,42 @@ public static class AgentEndpoints
             }
         });
 
+        endpoints.MapGet("/api/agents/work", (IAgentSessionService service) =>
+        {
+            try
+            {
+                return Results.Ok(AgentStatusResponse.From(service.GetWork()));
+            }
+            catch (Exception exception) when (IsHandled(exception))
+            {
+                return ToProblem(exception);
+            }
+        });
+
+        endpoints.MapPost("/api/agents/work/start", (IAgentSessionService service) =>
+        {
+            try
+            {
+                return Results.Ok(AgentStatusResponse.From(service.StartWork()));
+            }
+            catch (Exception exception) when (IsHandled(exception))
+            {
+                return ToProblem(exception);
+            }
+        });
+
+        endpoints.MapPost("/api/agents/work/stop", (IAgentSessionService service) =>
+        {
+            try
+            {
+                return Results.Ok(AgentStatusResponse.From(service.StopWork()));
+            }
+            catch (Exception exception) when (IsHandled(exception))
+            {
+                return ToProblem(exception);
+            }
+        });
+
         return endpoints;
     }
 

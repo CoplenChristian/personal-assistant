@@ -429,6 +429,11 @@ public sealed class TerminalApiFactory : WebApplicationFactory<Program>
         public AgentStatus StartPersonal() => Status();
         public AgentStatus StopPersonal() => Status();
         public void RecordPersonalConversationReference(string reference) { }
+        public AgentStatus GetWork() => throw new NotSupportedException();
+        public AgentStatus ReconcileWork() => throw new NotSupportedException();
+        public AgentStatus StartWork() => throw new NotSupportedException();
+        public AgentStatus StopWork() => throw new NotSupportedException();
+        public void RecordWorkConversationReference(string reference) => throw new NotSupportedException();
 
         private AgentStatus Status() => new(
             definition,

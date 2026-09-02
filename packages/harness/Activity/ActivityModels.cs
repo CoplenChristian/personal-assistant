@@ -148,4 +148,30 @@ public sealed record ActivityEvent(
                 eventType = "terminal.log.rotation",
                 outcome = "rotated"
             }));
+
+    public static ActivityEvent TerminalSession(
+        string agentId,
+        string? realm,
+        string operation,
+        string status,
+        string? outcome = null,
+        string? state = null,
+        string? errorCode = null) =>
+        new(
+            Guid.NewGuid().ToString("N"),
+            DateTimeOffset.UtcNow,
+            agentId,
+            realm,
+            "sessions",
+            operation,
+            "runtime-terminal",
+            status,
+            null,
+            JsonSerializer.Serialize(new
+            {
+                eventType = $"terminal.{operation}",
+                outcome,
+                state,
+                errorCode
+            }));
 }

@@ -1,5 +1,6 @@
 using PersonalAssistant.Harness;
 using PersonalAssistant.Harness.Agents;
+using PersonalAssistant.Harness.Activity;
 using PersonalAssistant.Harness.Settings;
 using PersonalAssistant.Harness.Runtime;
 using PersonalAssistant.Server.Endpoints;
@@ -25,6 +26,8 @@ builder.Services.AddSingleton<TmuxTerminalStream>(serviceProvider => serviceProv
 builder.Services.AddSingleton<TerminalInputSerializer>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalInput);
 builder.Services.AddSingleton<TerminalActivityStateTracker>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().TerminalState);
 builder.Services.AddSingleton<ISessionHygieneService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().SessionHygiene);
+builder.Services.AddSingleton<IActivityEventSink>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().ActivitySink);
+builder.Services.AddSingleton<ActivityQueryService>(serviceProvider => serviceProvider.GetRequiredService<HarnessRuntime>().ActivityQuery);
 builder.Services.AddProblemDetails();
 builder.WebHost.UseUrls($"http://{harnessRuntime.Bootstrap.ServerHost}:{harnessRuntime.Bootstrap.ServerPort}");
 
@@ -45,6 +48,7 @@ app.MapSettingsEndpoints();
 app.MapAgentEndpoints();
 app.MapSessionHygieneEndpoints();
 app.MapTerminalEndpoints();
+app.MapActivityEndpoints();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 if (Directory.Exists(dashboardRoot))
 {

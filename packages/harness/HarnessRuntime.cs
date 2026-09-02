@@ -19,6 +19,8 @@ public sealed class HarnessRuntime : IDisposable
     private readonly TerminalActivityStateTracker terminalState;
     private readonly ICheckpointCoordinator checkpointCoordinator;
     private readonly ISessionHygieneService sessionHygiene;
+    private readonly IActivityEventSink activitySink;
+    private readonly ActivityQueryService activityQuery;
 
     private HarnessRuntime(
         SettingsService settings,
@@ -30,7 +32,9 @@ public sealed class HarnessRuntime : IDisposable
         TerminalInputSerializer terminalInput,
         TerminalActivityStateTracker terminalState,
         ICheckpointCoordinator checkpointCoordinator,
-        ISessionHygieneService sessionHygiene)
+        ISessionHygieneService sessionHygiene,
+        IActivityEventSink activitySink,
+        ActivityQueryService activityQuery)
     {
         Settings = settings;
         this.database = database;
@@ -42,6 +46,8 @@ public sealed class HarnessRuntime : IDisposable
         this.terminalState = terminalState;
         this.checkpointCoordinator = checkpointCoordinator;
         this.sessionHygiene = sessionHygiene;
+        this.activitySink = activitySink;
+        this.activityQuery = activityQuery;
     }
 
     public SettingsService Settings { get; }
@@ -53,6 +59,8 @@ public sealed class HarnessRuntime : IDisposable
     public TerminalActivityStateTracker TerminalState => terminalState;
     public ICheckpointCoordinator Checkpoints => checkpointCoordinator;
     public ISessionHygieneService SessionHygiene => sessionHygiene;
+    public IActivityEventSink ActivitySink => activitySink;
+    public ActivityQueryService ActivityQuery => activityQuery;
 
     public static HarnessRuntime Create(
         string repositoryRoot,
@@ -86,6 +94,7 @@ public sealed class HarnessRuntime : IDisposable
             var claude = new ClaudeRuntimeAdapter(tmux);
             var agents = new AgentSessionService(registry, agentStore, tmux, claude);
             var activitySink = new SqliteActivityEventSink(database);
+            var activityQuery = new ActivityQueryService(database);
             var checkpointCoordinator = new CheckpointCoordinator(root, bootstrap.RuntimeDirectory, activitySink);
             sessionHygiene = new SessionHygieneService(registry, agentStore, claude, checkpointCoordinator, activitySink);
             var terminalWarningBytes = ReadInt64Setting(settingsSnapshot, "sessions.terminalLogWarningBytes");
@@ -108,7 +117,19 @@ public sealed class HarnessRuntime : IDisposable
                     request.Data,
                     cancellationToken));
             terminalState = new TerminalActivityStateTracker(personalDefinition.Id);
-            var runtime = new HarnessRuntime(service, database, bootstrap, agents, tmux, terminalStream, terminalInput, terminalState, checkpointCoordinator, sessionHygiene);
+            var runtime = new HarnessRuntime(
+                service,
+                database,
+                bootstrap,
+                agents,
+                tmux,
+                terminalStream,
+                terminalInput,
+                terminalState,
+                checkpointCoordinator,
+                sessionHygiene,
+                activitySink,
+                activityQuery);
             agents.ReconcilePersonal();
             return runtime;
         }

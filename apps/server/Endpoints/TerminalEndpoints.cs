@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using PersonalAssistant.Harness.Agents;
+using PersonalAssistant.Harness.Activity;
 using PersonalAssistant.Harness.Runtime;
 using PersonalAssistant.Harness.Settings;
 
@@ -63,12 +64,20 @@ public static class TerminalEndpoints
         var terminalStream = context.RequestServices.GetRequiredService<TmuxTerminalStream>();
         var terminalInput = context.RequestServices.GetRequiredService<TerminalInputSerializer>();
         var terminalState = context.RequestServices.GetRequiredService<TerminalActivityStateTracker>();
+        var activitySink = context.RequestServices.GetRequiredService<IActivityEventSink>();
         var settings = context.RequestServices.GetRequiredService<SettingsService>();
         var scrollbackLines = ReadScrollbackLines(settings);
+        var realm = status.Definition.Realms.FirstOrDefault();
         terminalState.ResetForHealthySession(terminalInput.QueuedCount > 0 || terminalInput.HasInFlightOperation);
 
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         using var lease = terminalStream.Subscribe(status.Session.TmuxSessionName);
+        activitySink.Append(ActivityEvent.TerminalSession(
+            status.Definition.Id,
+            realm,
+            "terminal_stream",
+            "success",
+            outcome: "observer_connected"));
         using var stateSubscription = terminalState.Subscribe();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         using var sendLock = new SemaphoreSlim(1, 1);
@@ -79,8 +88,21 @@ public static class TerminalEndpoints
             var screen = TerminalScreenNormalizer.Normalize(snapshot);
             await SendJsonAsync(socket, new TerminalHelloFrame(TerminalProtocol.ContractVersion, status.Definition.Id), sendLock, cancellation.Token);
             await SendJsonAsync(socket, new TerminalScreenFrame(0, screen.Data, screen.Columns, screen.Rows, HydrationBoundary: true), sendLock, cancellation.Token);
+            activitySink.Append(ActivityEvent.TerminalSession(
+                status.Definition.Id,
+                realm,
+                "terminal_hydration",
+                "success",
+                outcome: "hydrated"));
             var initialState = await stateSubscription.Reader.ReadAsync(cancellation.Token);
             await SendJsonAsync(socket, new TerminalStateFrame(initialState.ToWireValue()), sendLock, cancellation.Token);
+            activitySink.Append(ActivityEvent.TerminalSession(
+                status.Definition.Id,
+                realm,
+                "terminal_state",
+                "success",
+                state: initialState.ToWireValue(),
+                outcome: "reported"));
 
             var sendTask = SendScreenUpdatesAsync(
                 socket,
@@ -90,14 +112,24 @@ public static class TerminalEndpoints
                 scrollbackLines,
                 sendLock,
                 cancellation.Token);
-            var stateTask = SendStateAsync(socket, stateSubscription, sendLock, cancellation.Token);
+            var stateTask = SendStateAsync(
+                socket,
+                stateSubscription,
+                sendLock,
+                cancellation.Token,
+                activitySink,
+                status.Definition.Id,
+                realm);
             var receiveTask = ReceiveClientFramesAsync(
                 socket,
                 sendLock,
                 cancellation.Token,
                 agents,
                 terminalInput,
-                terminalState);
+                terminalState,
+                activitySink,
+                status.Definition.Id,
+                realm);
             var completedTask = await Task.WhenAny(sendTask, stateTask, receiveTask);
             var streamFailure = GetTerminalStreamFailure(completedTask);
             cancellation.Cancel();
@@ -195,13 +227,28 @@ public static class TerminalEndpoints
         WebSocket socket,
         TerminalActivityStateSubscription subscription,
         SemaphoreSlim sendLock,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IActivityEventSink activitySink,
+        string agentId,
+        string? realm)
     {
+        TerminalActivityState? lastRecorded = null;
         try
         {
             await foreach (var state in subscription.Reader.ReadAllAsync(cancellationToken))
             {
                 await SendJsonAsync(socket, new TerminalStateFrame(state.ToWireValue()), sendLock, cancellationToken);
+                if (lastRecorded != state)
+                {
+                    activitySink.Append(ActivityEvent.TerminalSession(
+                        agentId,
+                        realm,
+                        "terminal_state",
+                        "success",
+                        state: state.ToWireValue(),
+                        outcome: "reported"));
+                    lastRecorded = state;
+                }
             }
         }
         catch (TerminalStateException exception)
@@ -216,7 +263,10 @@ public static class TerminalEndpoints
         CancellationToken cancellationToken,
         IAgentSessionService agents,
         TerminalInputSerializer terminalInput,
-        TerminalActivityStateTracker terminalState)
+        TerminalActivityStateTracker terminalState,
+        IActivityEventSink activitySink,
+        string agentId,
+        string? realm)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
         try
@@ -263,7 +313,17 @@ public static class TerminalEndpoints
                     }
                     else if (frame is TerminalInputFrame input)
                     {
-                        await HandleInputAsync(socket, sendLock, cancellationToken, agents, terminalInput, terminalState, input);
+                        await HandleInputAsync(
+                            socket,
+                            sendLock,
+                            cancellationToken,
+                            agents,
+                            terminalInput,
+                            terminalState,
+                            activitySink,
+                            agentId,
+                            realm,
+                            input);
                     }
                     else
                     {
@@ -290,11 +350,21 @@ public static class TerminalEndpoints
         IAgentSessionService agents,
         TerminalInputSerializer terminalInput,
         TerminalActivityStateTracker terminalState,
+        IActivityEventSink activitySink,
+        string agentId,
+        string? realm,
         TerminalInputFrame input)
     {
-        if (!TryGetHealthyAgent(agents, out var status, out var errorCode, out var errorDetail))
+        if (!TryGetHealthyAgent(agents, out _, out var errorCode, out var errorDetail))
         {
             terminalState.MarkError();
+            activitySink.Append(ActivityEvent.TerminalSession(
+                agentId,
+                realm,
+                "terminal_input",
+                "blocked",
+                outcome: "rejected",
+                errorCode: errorCode));
             await SendJsonAsync(socket, new TerminalErrorFrame(errorCode, errorDetail), sendLock, cancellationToken);
             return;
         }
@@ -303,6 +373,12 @@ public static class TerminalEndpoints
         try
         {
             var acknowledgement = await terminalInput.EnqueueAsync(input.Sequence, input.Data, cancellationToken);
+            activitySink.Append(ActivityEvent.TerminalSession(
+                agentId,
+                realm,
+                "terminal_input",
+                "success",
+                outcome: "accepted"));
             await SendJsonAsync(socket, new TerminalInputAcknowledgementFrame(acknowledgement.Sequence), sendLock, cancellationToken);
             if (terminalInput.QueuedCount == 0 && !terminalInput.HasInFlightOperation)
             {
@@ -312,6 +388,13 @@ public static class TerminalEndpoints
         catch (TerminalInputException exception)
         {
             terminalState.MarkError();
+            activitySink.Append(ActivityEvent.TerminalSession(
+                agentId,
+                realm,
+                "terminal_input",
+                "blocked",
+                outcome: "rejected",
+                errorCode: exception.Code));
             await SendJsonAsync(socket, new TerminalErrorFrame(exception.Code, exception.Message), sendLock, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

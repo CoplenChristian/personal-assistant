@@ -105,17 +105,31 @@ public sealed class SqliteHarnessDatabase : IDisposable
             var events = new List<ActivityEvent>();
             while (reader.Read())
             {
-                events.Add(new ActivityEvent(
-                    reader.GetString(0),
-                    DateTimeOffset.Parse(reader.GetString(1)),
-                    reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3),
-                    reader.GetString(4),
-                    reader.GetString(5),
-                    reader.IsDBNull(6) ? null : reader.GetString(6),
-                    reader.GetString(7),
-                    reader.IsDBNull(8) ? null : reader.GetInt64(8),
-                    reader.GetString(9)));
+                events.Add(ReadActivityEvent(reader));
+            }
+
+            return events;
+        }
+    }
+
+    public IReadOnlyList<ActivityEvent> ReadActivityEventsBetween(DateTimeOffset startUtc, DateTimeOffset endUtc)
+    {
+        lock (syncRoot)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT id, timestamp, agent_id, realm, category, operation, target, status, duration_ms, metadata_json
+                FROM activity_events
+                WHERE timestamp >= $start AND timestamp < $end
+                ORDER BY timestamp ASC, id ASC;
+                """;
+            command.Parameters.AddWithValue("$start", startUtc.ToString("O"));
+            command.Parameters.AddWithValue("$end", endUtc.ToString("O"));
+            using var reader = command.ExecuteReader();
+            var events = new List<ActivityEvent>();
+            while (reader.Read())
+            {
+                events.Add(ReadActivityEvent(reader));
             }
 
             return events;
@@ -154,6 +168,19 @@ public sealed class SqliteHarnessDatabase : IDisposable
         command.Parameters.AddWithValue("$metadata_json", activityEvent.MetadataJson);
         command.ExecuteNonQuery();
     }
+
+    private static ActivityEvent ReadActivityEvent(Microsoft.Data.Sqlite.SqliteDataReader reader) =>
+        new(
+            reader.GetString(0),
+            DateTimeOffset.Parse(reader.GetString(1)),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.IsDBNull(6) ? null : reader.GetString(6),
+            reader.GetString(7),
+            reader.IsDBNull(8) ? null : reader.GetInt64(8),
+            reader.GetString(9));
 
     private void Initialize()
     {

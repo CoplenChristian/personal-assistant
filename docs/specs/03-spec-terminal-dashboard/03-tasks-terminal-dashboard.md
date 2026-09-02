@@ -1,6 +1,6 @@
 # 03-tasks-terminal-dashboard.md
 
-Status: T1-T2 complete; T2 corrective alignment and UX follow-up complete; T3 complete; T4 pending
+Status: T1-T4 complete; T4 activity feed and local-day counters complete
 Spec: [03-spec-terminal-dashboard.md](03-spec-terminal-dashboard.md)
 Planning mode: planning audit passed; implementation may begin through the SDD workflow.
 
@@ -236,7 +236,7 @@ scheduling, skills, integrations, memory search, or multi-user access.
   error/blocked states. Test artifact: React tests and hosted screenshot prove
   the controls never expose private paths or fabricate successful actions.
 
-### [ ] 4.0 Activity feed and local-day counters
+### [x] 4.0 Activity feed and local-day counters
 
 #### 4.0 Proof Artifact(s)
 
@@ -256,26 +256,26 @@ scheduling, skills, integrations, memory search, or multi-user access.
 
 #### 4.0 Tasks
 
-- [ ] 4.1 Define canonical activity category keys, redaction helpers, bounded
+- [x] 4.1 Define canonical activity category keys, redaction helpers, bounded
   feed size, local timezone/date boundary behavior, and deterministic counter
   aggregation over immutable SQLite events. Test artifact: seeded C# tests
   cover every category, zeros, midnight/timezone boundaries, stable ordering,
   and malformed metadata.
-- [ ] 4.2 Add activity events for terminal hydration/stream/input/state and
+- [x] 4.2 Add activity events for terminal hydration/stream/input/state and
   hygiene outcomes at the existing SQLite transaction boundary without storing
   raw terminal or input data. Test artifact: privacy/transaction tests prove
   safe metadata and no event on rejected/no-op refresh operations.
-- [ ] 4.3 Add versioned `GET /api/activity` response contracts with date/timezone
+- [x] 4.3 Add versioned `GET /api/activity` response contracts with date/timezone
   parameters, bounded recent events, counters, ProblemDetails, and explicit
   zero states. Test artifact: API tests cover defaults, valid/invalid dates,
   timezone conversion, event limits, redaction, blocked/failure statuses, and
   no fake integration successes.
-- [ ] 4.4 Implement `ActivityPanel` and its client with local-day label,
+- [x] 4.4 Implement `ActivityPanel` and its client with local-day label,
   counters, recent feed, loading/error/empty states, independent refresh, and
   accessible failure/blocked status. Test artifact: React tests cover seeded
   data, zero categories, date labels, errors, refresh, and separation from the
   terminal WebSocket.
-- [ ] 4.5 Integrate terminal, hygiene, and activity surfaces into the hosted
+- [x] 4.5 Integrate terminal, hygiene, and activity surfaces into the hosted
   `/agents/personal` route and verify the complete browser experience at
   desktop and narrow widths. Proof artifact: sanitized screenshots plus the
   full repository command output demonstrate the final acceptance gate.

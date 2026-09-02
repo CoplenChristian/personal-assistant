@@ -5,6 +5,7 @@ import { createSettingsApi } from "../../api/settingsApi";
 import type { AgentStatus } from "../../api/agentsApi";
 import { SessionHygieneControls } from "./SessionHygieneControls";
 import { StandardizedTerminalSurface } from "./StandardizedTerminalSurface";
+import { ActivityPanel } from "./ActivityPanel";
 
 function errorMessage(error: unknown): string {
   if (error instanceof AgentApiError) {
@@ -87,10 +88,13 @@ export function PersonalAgentPage() {
       </div>
 
       {status.runtimeHealthy ? (
-        <>
-          <StandardizedTerminalSurface scrollbackLines={scrollbackLines} />
-          <SessionHygieneControls />
-        </>
+        <div className="agent-page__workspace">
+          <div className="agent-page__terminal-column">
+            <StandardizedTerminalSurface scrollbackLines={scrollbackLines} />
+            <SessionHygieneControls />
+          </div>
+          <ActivityPanel />
+        </div>
       ) : (
         <section className="terminal-not-ready" aria-labelledby="terminal-not-ready-title">
           <span className="eyebrow">OBSERVER STATUS</span>

@@ -39,7 +39,7 @@ memory search, or external integrations.
 | `packages/harness/Agents/AgentSessionService.cs` | Shared lifecycle orchestration to generalize beyond personal Claude. |
 | `packages/harness/Runtime/ClaudeRuntimeAdapter.cs` | Existing Claude adapter to fold behind a runtime-neutral contract. |
 | `packages/harness/Runtime/CodexRuntimeAdapter.cs` | Planned Codex native lifecycle adapter. |
-| `packages/harness/Runtime/RuntimeAdapterResolver.cs` | Planned runtime-to-adapter resolution seam. |
+| `packages/harness/Runtime/AgentRuntimeAdapter.cs` | Runtime-neutral adapter contract and `RuntimeAdapterResolver` seam. |
 | `packages/harness/Runtime/TmuxRuntime.cs` | Existing safe tmux launch and health inspection boundary. |
 | `packages/harness/HarnessRuntime.cs` | Composition root for adapters and lifecycle services. |
 | `apps/server/Endpoints/AgentEndpoints.cs` | Personal and work lifecycle API routes. |

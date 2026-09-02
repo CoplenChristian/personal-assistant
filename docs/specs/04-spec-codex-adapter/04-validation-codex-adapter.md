@@ -85,7 +85,7 @@ git diff --check                              → PASS
 ### Implementation commits analyzed
 
 - `d8572d9` — Phase 0D Codex runtime adapter (primary implementation)
-- Remediation commit (pending) — startup reconciliation, work-start API test, validation report
+- `6568a3d` — startup reconciliation, work-start API test, validation report
 
 ### Changed core files (scope)
 
